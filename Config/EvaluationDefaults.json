@@ -1,0 +1,21 @@
+{
+  "EvaluateCalculationRulesByDefault": false,
+  "EvaluateValidationRulesByDefault": true,
+  "UseVisibleEvaluationExtentByDefault": true,
+  "EvaluateModifiedVersionByDefault": true,
+  "RunEvaluationAsynchronouslyByDefault": false,
+  "ErrorInspectorColumns": [
+    { "Key": "ShapeIndicator", "Order": 1, "IsVisible": true },
+    { "Key": "RuleType", "Order": 2, "IsVisible": true },
+    { "Key": "ExceptionStatus", "Order": 3, "IsVisible": true },
+    { "Key": "FeatureObjectId", "Order": 4, "IsVisible": true },
+    { "Key": "FeatureClass", "Order": 5, "IsVisible": true },
+    { "Key": "AssetGroup", "Order": 6, "IsVisible": true },
+    { "Key": "FeatureGlobalId", "Order": 7, "IsVisible": true },
+    { "Key": "ErrorNumber", "Order": 8, "IsVisible": true },
+    { "Key": "Message", "Order": 9, "IsVisible": true },
+    { "Key": "Rule", "Order": 10, "IsVisible": true },
+    { "Key": "Description", "Order": 11, "IsVisible": true },
+    { "Key": "Severity", "Order": 12, "IsVisible": true }
+  ]
+}

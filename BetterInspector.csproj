@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <AssemblyName>BetterInspector.ArcPro.3.3.v.1.0.0</AssemblyName>
+    <RootNamespace>BetterInspector</RootNamespace>
+    <Version>1.0.0</Version>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <NoWarn>CA1416</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="Config.daml" />
+    <Content Include="Config.daml" />
+    <Content Include="Config\EvaluationDefaults.json" />
+    <Content Include="Images\AddInDesktop16.png" />
+    <Content Include="Images\AddInDesktop32.png" />
+    <Content Include="Images\ErrorInspector.png" />
+    <Content Include="DarkImages\ErrorInspector.png" />
+    <None Include="Properties\launchSettings.json" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="ArcGIS.Desktop.Framework"><HintPath>$(UserProfile)\.nuget\packages\esri.arcgispro.extensions30\3.3.0.52636\ref\net8.0-windows7.0\ArcGIS.Desktop.Framework.dll</HintPath><CopyLocal>False</CopyLocal><Private>False</Private></Reference>
+    <Reference Include="ArcGIS.Core"><HintPath>$(UserProfile)\.nuget\packages\esri.arcgispro.extensions30\3.3.0.52636\ref\net8.0-windows7.0\ArcGIS.Core.dll</HintPath><CopyLocal>False</CopyLocal><Private>False</Private></Reference>
+    <Reference Include="ArcGIS.Desktop.Core"><HintPath>$(UserProfile)\.nuget\packages\esri.arcgispro.extensions30\3.3.0.52636\ref\net8.0-windows7.0\ArcGIS.Desktop.Core.dll</HintPath><CopyLocal>False</CopyLocal><Private>False</Private></Reference>
+    <Reference Include="ArcGIS.Desktop.Mapping"><HintPath>$(UserProfile)\.nuget\packages\esri.arcgispro.extensions30\3.3.0.52636\ref\net8.0-windows7.0\ArcGIS.Desktop.Mapping.dll</HintPath><CopyLocal>False</CopyLocal><Private>False</Private></Reference>
+    <Reference Include="ArcGIS.Desktop.Editing"><HintPath>$(UserProfile)\.nuget\packages\esri.arcgispro.extensions30\3.3.0.52636\ref\net8.0-windows7.0\ArcGIS.Desktop.Editing.dll</HintPath><CopyLocal>False</CopyLocal><Private>False</Private></Reference>
+    <Reference Include="ArcGIS.Desktop.Extensions"><HintPath>$(UserProfile)\.nuget\packages\esri.arcgispro.extensions30\3.3.0.52636\ref\net8.0-windows7.0\ArcGIS.Desktop.Extensions.dll</HintPath><CopyLocal>False</CopyLocal><Private>False</Private></Reference>
+  </ItemGroup>
+  <Import Project="Esri.ProApp.SDK.Desktop.local.targets" Condition="Exists('Esri.ProApp.SDK.Desktop.local.targets') AND !Exists('Esri.ArcGISPro.Extensions.targets')" />
+</Project>

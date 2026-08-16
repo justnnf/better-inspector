@@ -1,0 +1,93 @@
+<UserControl x:Class="BetterInspector.ErrorInspectorDockpaneView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:extensions="clr-namespace:ArcGIS.Desktop.Extensions;assembly=ArcGIS.Desktop.Extensions">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+            <ResourceDictionary.MergedDictionaries>
+                <extensions:DesignOnlyResourceDictionary Source="pack://application:,,,/ArcGIS.Desktop.Framework;component\Themes\Default.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Grid Margin="8">
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+        <DockPanel Margin="0,0,0,5">
+            <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                <Button Content="Evaluate &#x25BE;" Click="MenuButton_OnClick" Style="{DynamicResource Esri_Button}" Margin="3,0">
+                    <Button.ContextMenu>
+                        <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                            <MenuItem Header="Batch calculation rules" IsCheckable="True" IsChecked="{Binding EvaluateCalculation}" />
+                            <MenuItem Header="Validation rules" IsCheckable="True" IsChecked="{Binding EvaluateValidation}" />
+                            <Separator />
+                            <MenuItem Header="Visible extent" IsCheckable="True" IsChecked="{Binding IsVisibleExtent}" />
+                            <MenuItem Header="Full extent" IsCheckable="True" IsChecked="{Binding IsFullExtent}" />
+                            <MenuItem Header="Modified in current version" IsCheckable="True"
+                                      IsChecked="{Binding ModifiedInVersion}"
+                                      Visibility="{Binding CanEvaluateVersionChanges, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <MenuItem Header="Run asynchronously" IsCheckable="True"
+                                      IsChecked="{Binding RunAsynchronously}"
+                                      Visibility="{Binding IsFeatureServiceWorkspace, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
+                <Button Content="Run" Command="{Binding EvaluateCommand}" Style="{DynamicResource Esri_Button}" Margin="3,0" />
+            </StackPanel>
+        </DockPanel>
+        <DataGrid x:Name="ErrorsGrid" Grid.Row="1" ItemsSource="{Binding Errors}" SelectedItem="{Binding SelectedError, Mode=TwoWay}"
+                  AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" SelectionMode="Extended"
+                  Style="{DynamicResource Esri_DataGrid}" BorderBrush="{DynamicResource Esri_BorderBrush}" BorderThickness="1"
+                  FontSize="11" RowHeight="24" HeadersVisibility="Column" CanUserResizeColumns="True"
+                  ScrollViewer.HorizontalScrollBarVisibility="Visible" ScrollViewer.VerticalScrollBarVisibility="Visible"
+                  PreviewMouseRightButtonDown="ErrorsGrid_OnPreviewMouseRightButtonDown">
+            <DataGrid.ContextMenu>
+                <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                    <MenuItem Header="Copy cell" Click="CopyCell_OnClick" />
+                    <MenuItem Header="Copy row(s) with headers" Click="CopyRowsWithHeaders_OnClick" />
+                    <Separator />
+                    <MenuItem Header="Mark as exception" Command="{Binding MarkExceptionCommand}" />
+                    <MenuItem Header="Clear exception" Command="{Binding ClearExceptionCommand}" />
+                    <Separator />
+                    <MenuItem Header="Select Source Feature" Command="{Binding SelectSourceFeatureCommand}" />
+                    <MenuItem Header="Zoom to error" Command="{Binding ZoomToErrorCommand}" />
+                </ContextMenu>
+            </DataGrid.ContextMenu>
+            <DataGrid.Resources>
+                <Style x:Key="ErrorCellText" TargetType="TextBlock">
+                    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                    <Setter Property="ToolTip" Value="{Binding RelativeSource={RelativeSource Self}, Path=Text}" />
+                    <Setter Property="VerticalAlignment" Value="Center" />
+                    <Setter Property="TextAlignment" Value="Left" />
+                    <Setter Property="Margin" Value="4,0,3,0" />
+                </Style>
+            </DataGrid.Resources>
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Shape" Binding="{Binding ShapeIndicator}" SortMemberPath="ShapeIndicator" Width="Auto" MaxWidth="70" ElementStyle="{StaticResource ErrorCellText}" />
+                <DataGridTextColumn Header="Rule Type" Binding="{Binding RuleType}" SortMemberPath="RuleType" Width="Auto" MaxWidth="125" ElementStyle="{StaticResource ErrorCellText}" />
+                <DataGridTextColumn Header="Exception" Binding="{Binding ExceptionStatus}" SortMemberPath="ExceptionStatus" Width="Auto" MaxWidth="105" ElementStyle="{StaticResource ErrorCellText}" />
+                <DataGridTextColumn Header="Feature ObjectID" Binding="{Binding FeatureObjectId}" SortMemberPath="FeatureObjectId" Width="Auto" MaxWidth="145" ElementStyle="{StaticResource ErrorCellText}" />
+                <DataGridTextColumn Header="Feature Class" Binding="{Binding FeatureClass}" SortMemberPath="FeatureClass" Width="Auto" MaxWidth="180" ElementStyle="{StaticResource ErrorCellText}" />
+                <DataGridTextColumn Header="Asset Group" Binding="{Binding AssetGroup}" SortMemberPath="AssetGroup" Width="Auto" MaxWidth="180" ElementStyle="{StaticResource ErrorCellText}" />
+                <DataGridTextColumn Header="Feature GlobalID" Binding="{Binding FeatureGlobalId}" SortMemberPath="FeatureGlobalId" Width="Auto" MaxWidth="190" ElementStyle="{StaticResource ErrorCellText}" />
+                <DataGridTextColumn Header="Error Number" Binding="{Binding ErrorNumber}" SortMemberPath="ErrorNumber" Width="Auto" MaxWidth="125" ElementStyle="{StaticResource ErrorCellText}" />
+                <DataGridTextColumn Header="Error Message" Binding="{Binding Message}" SortMemberPath="Message" Width="Auto" MaxWidth="300" ElementStyle="{StaticResource ErrorCellText}" />
+                <DataGridTextColumn Header="Rule Name" Binding="{Binding Rule}" SortMemberPath="Rule" Width="Auto" MaxWidth="220" ElementStyle="{StaticResource ErrorCellText}" />
+                <DataGridTextColumn Header="Description" Binding="{Binding Description}" SortMemberPath="Description" Width="Auto" MaxWidth="260" ElementStyle="{StaticResource ErrorCellText}" />
+                <DataGridTextColumn Header="Severity" Binding="{Binding Severity}" SortMemberPath="Severity" Width="Auto" MaxWidth="90" ElementStyle="{StaticResource ErrorCellText}" />
+            </DataGrid.Columns>
+        </DataGrid>
+        <Grid Grid.Row="2" Margin="0,5,0,0">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <Border Grid.Column="0" BorderBrush="{DynamicResource Esri_BorderBrush}" BorderThickness="1" Padding="8,5" Margin="0,0,6,0">
+                <TextBlock Text="{Binding Status}" FontSize="10" TextWrapping="Wrap" VerticalAlignment="Center" />
+            </Border>
+            <Button Grid.Column="1" Content="Refresh Error Layers" Command="{Binding RefreshCommand}" Style="{DynamicResource Esri_Button}" Margin="0,0,6,0" Padding="10,4" />
+            <Border Grid.Column="2" BorderBrush="{DynamicResource Esri_BorderBrush}" BorderThickness="1" Padding="8,5">
+                <StackPanel Orientation="Horizontal">
+                    <RadioButton Content="All Errors" IsChecked="{Binding ShowAllErrors}" GroupName="ErrorScope" Margin="0,0,10,0" />
+                    <RadioButton Content="Visible Errors" IsChecked="{Binding ShowVisibleErrors}" GroupName="ErrorScope" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ArcGIS defaultAssembly="BetterInspector.ArcPro.3.3.v.1.0.0.dll"
+        defaultNamespace="BetterInspector"
+        xmlns="http://schemas.esri.com/DADF/Registry"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://schemas.esri.com/DADF/Registry file:///C:/Program Files/ArcGIS/Pro/bin/ArcGIS.Desktop.Framework.xsd">
+  <AddInInfo id="{D4C0DF7F-2EA3-41FE-9998-7DCE60A8FB8B}"
+             name="Better Inspector"
+             version="1.0.0"
+             desktopVersion="3.3"
+             product="ArcGISPro">
+    <Name>Better Inspector</Name>
+    <Description>An improved Error Inspector for ArcGIS Pro Error Layers.</Description>
+    <Image>Images\ErrorInspector.png</Image>
+    <Author>J. Foltinek</Author>
+    <Date>8/16/2026</Date>
+    <Subject>Editing</Subject>
+  </AddInInfo>
+  <dependencies>
+    <dependency name="ADCore.daml" />
+    <dependency name="ADMapping.daml" />
+  </dependencies>
+  <modules>
+    <insertModule id="BetterInspector_Module" className="Module1" autoLoad="false" caption="Better Inspector">
+      <tabs>
+        <tab id="BetterInspector_Tab" caption="Better Inspector">
+          <group refID="BetterInspector_Group" />
+        </tab>
+      </tabs>
+      <groups>
+        <group id="BetterInspector_Group" caption="Better Inspector">
+          <button refID="BetterInspector_ShowPaneButton" size="large" />
+        </group>
+      </groups>
+      <controls>
+        <button id="BetterInspector_ShowPaneButton" caption="Inspect Errors" className="ShowErrorInspectorPaneButton"
+                loadOnClick="true" smallImage="Images\ErrorInspector.png" largeImage="Images\ErrorInspector.png"
+                condition="esri_mapping_mapPane">
+          <tooltip heading="Utility Network Error Inspector">Inspect attribute-rule errors from the active map's Error Layers.</tooltip>
+        </button>
+      </controls>
+      <dockPanes>
+        <dockPane id="BetterInspector_ErrorInspectorDockpane" caption="Better Inspector" className="ErrorInspectorDockpaneViewModel"
+                  dock="bottom" autoHide="false" height="360">
+          <content className="ErrorInspectorDockpaneView" />
+        </dockPane>
+      </dockPanes>
+    </insertModule>
+  </modules>
+</ArcGIS>
