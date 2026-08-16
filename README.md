@@ -43,4 +43,6 @@ The build packages and registers:
 
 `bin\Debug\net8.0-windows\BetterInspector.ArcPro.3.3.v.1.0.0.esriAddinX`
 
+The compiled add-in for this version is also committed at [release/BetterInspector.ArcPro.3.3.v.1.0.0.esriAddinX](release/BetterInspector.ArcPro.3.3.v.1.0.0.esriAddinX).
+
 The package filename is controlled by the project assembly name. When changing the version, update the assembly name in `BetterInspector.csproj`, the `defaultAssembly` value in `Config.daml`, and `PackageFileName` in `InspectorConfig.cs` together.
