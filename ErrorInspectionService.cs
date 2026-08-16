@@ -9,10 +9,7 @@ using ArcGIS.Desktop.Mapping;
 
 namespace BetterInspector;
 
-/// <summary>
-/// Reads the map's attribute-rule Error Layers directly. This deliberately does not use
-/// ArcGIS Pro's Error Inspector and therefore keeps its own display state.
-/// </summary>
+/// <summary>Reads and updates the active map's Error Layers.</summary>
 internal sealed class ErrorInspectionService
 {
     private static readonly string[] ErrorLayerNames =
@@ -53,10 +50,7 @@ internal sealed class ErrorInspectionService
             capabilities.IsFeatureService, capabilities.CanEvaluateVersionChanges);
     }
 
-    /// <summary>
-    /// Evaluates batch calculation and/or validation rules through the ArcGIS Pro
-    /// Core Data SDK. This avoids the licensed Evaluate Rules geoprocessing tool.
-    /// </summary>
+    /// <summary>Runs the selected calculation or validation rules.</summary>
     public RuleEvaluationOutcome EvaluateRules(AttributeRuleType ruleType,
         EvaluationExtent extentScope, bool changesInVersion, bool runAsynchronously)
     {
@@ -65,10 +59,8 @@ internal sealed class ErrorInspectionService
         if (!HasErrorLayers(map))
             throw new InvalidOperationException("No Error Layers are available in the active map.");
 
-        // Error Layers are a view of validation-system tables.  They are useful for
-        // inspection, but are not a reliable evaluation connection for a utility
-        // network feature service.  Anchor evaluation to a real utility-network
-        // source so Pro preserves the active service/version connection.
+        // Use a real utility-network source for evaluation so Pro keeps the active
+        // feature-service and version connection.
         using var geodatabase = OpenUtilityNetworkGeodatabase(map);
 
         using var manager = geodatabase.GetAttributeRuleManager();
@@ -76,9 +68,8 @@ internal sealed class ErrorInspectionService
             throw new InvalidOperationException(
                 "This geodatabase does not support SDK evaluation of batch calculation or validation rules.");
 
-        // ChangesInVersion requires a real, non-default version. Passing it for a
-        // file geodatabase reaches CoreInterop with no version object and can cause
-        // a NullReferenceException instead of a supported-configuration error.
+        // Only use ChangesInVersion for a named service version. It is not valid
+        // for file geodatabases or the default version.
         var canEvaluateVersionChanges = CanEvaluateChangesInVersion(geodatabase);
         var useVersionChanges = changesInVersion && canEvaluateVersionChanges;
         var versionScope = useVersionChanges
@@ -94,9 +85,7 @@ internal sealed class ErrorInspectionService
                 : ServiceSynchronizationType.Synchronous;
         }
 
-        // For an ArcGIS Pro add-in, Esri recommends this extension over
-        // AttributeRuleManager.Evaluate. It creates an EditOperation, adds it to
-        // undo/redo, invalidates affected layers, and redraws the map.
+        // This also creates an undoable edit operation and refreshes affected layers.
         var result = manager.EvaluateInEditOperation(description);
         var scopeNotice = changesInVersion && !useVersionChanges
             ? "This local or nonversioned workspace has no version delta; pending rows were evaluated using EntireVersion scope and the selected extent."
@@ -135,16 +124,14 @@ internal sealed class ErrorInspectionService
         }
         catch
         {
-            // Scanning Error Layers must remain available even when their owning
-            // utility-network connection cannot currently be opened for evaluation.
+            // Reading errors can still work when evaluation is not available.
             return new EvaluationCapabilities(false, false);
         }
     }
 
     private static bool CanEvaluateChangesInVersion(Geodatabase geodatabase)
     {
-        // Attribute-rule version-delta evaluation is supported through a versioned
-        // feature service. File geodatabases are intentionally excluded here.
+        // Version-delta evaluation only works with a versioned feature service.
         if (geodatabase.GetGeodatabaseType() != GeodatabaseType.Service ||
             !geodatabase.IsVersioningSupported())
             return false;
@@ -364,7 +351,7 @@ internal sealed class ErrorInspectionService
                 }
                 catch
                 {
-                    // Some system sources cannot be opened as user-facing tables.
+                    // System sources are not always available as tables.
                 }
             }
         }
@@ -450,7 +437,7 @@ internal sealed class ErrorInspectionService
                 }
                 catch
                 {
-                    // Fall back to the raw error-table fields for older workspaces.
+                    // Older workspaces may only expose the values in the error table.
                 }
             }
 

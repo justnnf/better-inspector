@@ -298,8 +298,8 @@ internal sealed class ErrorInspectorDockpaneViewModel : DockPane
         }
         catch
         {
-            // Name matching remains available for service layers whose published
-            // layer ID differs from the enterprise geodatabase class ID.
+            // Service layer IDs can differ from their geodatabase class IDs, so use
+            // the layer name if the IDs do not match.
         }
         var tableName = table.GetName();
         var separator = tableName.LastIndexOf('.');

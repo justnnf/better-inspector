@@ -4,7 +4,7 @@ using ArcGIS.Desktop.Mapping;
 
 namespace BetterInspector;
 
-/// <summary>One attribute-rule error read directly from an Error Layer in the active map.</summary>
+/// <summary>One error shown in an Error Layer.</summary>
 internal sealed class ErrorInspectionItem
 {
     public required string ErrorLayer { get; init; }

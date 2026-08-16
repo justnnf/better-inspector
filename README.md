@@ -1,48 +1,45 @@
 # Better Inspector
 
-Better Inspector is a standalone ArcGIS Pro 3.3 add-in for reviewing utility-network attribute-rule errors directly from the Error Layers in the active map.
+Better Inspector is a separate ArcGIS Pro add-in for looking at utility network errors. It reads the Error Layers that are already in the active map, so you can review errors without opening the built-in Error Inspector.
 
-## Features
+## What it does
 
-- Reads error point, line, polygon, and table layers in the active map.
-- Filters errors to the visible map extent.
-- Zooms to an error or selects its source feature/table record.
-- Marks and clears error exceptions.
-- Runs calculation and validation rule evaluation, including feature-service asynchronous evaluation when supported.
-- Uses matching light and dark ribbon icons.
+- Lists errors from Error Point, Error Line, Error Polygon, and Error Table layers.
+- Lets you show all errors or only the ones in the current map extent.
+- Zooms to an error and selects the source feature or table record.
+- Marks an error as an exception or clears an exception.
+- Runs calculation rules and validation rules from the pane.
 
-## Use in ArcGIS Pro
+## Using it
 
-1. Add the relevant Error Layers to an active map.
-2. Open the **Better Inspector** ribbon tab and click **Inspect Errors**.
-3. Click **Refresh Error Layers** to load errors.
-4. Use the **Evaluate** menu to choose rule types and evaluation extent, then click **Run**.
+Add the Error Layers to the map, open the **Better Inspector** tab, and click **Inspect Errors**. Use **Refresh Error Layers** to load the errors. The **Evaluate** dropdown controls what gets evaluated; click **Run** when the options are set the way you want them.
 
-## Evaluation defaults and table columns
+## Defaults
 
-[Config/EvaluationDefaults.json](Config/EvaluationDefaults.json) controls the initial evaluation choices and the error table layout. It supports:
+The defaults are in [Config/EvaluationDefaults.json](Config/EvaluationDefaults.json).
 
-- `EvaluateCalculationRulesByDefault`
-- `EvaluateValidationRulesByDefault`
-- `UseVisibleEvaluationExtentByDefault`
-- `EvaluateModifiedVersionByDefault`
-- `RunEvaluationAsynchronouslyByDefault`
-- `ErrorInspectorColumns`, where each entry has `Key`, `Order`, and `IsVisible`.
+You can set the default evaluation options there:
 
-The file is bundled into the `.esriAddinX` package as `Config/EvaluationDefaults.json`. To customize a distributed package, edit that file in the archive and restart ArcGIS Pro.
+- Calculation rules
+- Validation rules
+- Visible or full extent
+- Modified features in the current version
+- Asynchronous evaluation for feature services
 
-## Build and install
+`ErrorInspectorColumns` controls the table layout. Each column has a `Key`, `Order`, and `IsVisible` value.
 
-Requirements: ArcGIS Pro 3.3 and the .NET 8 SDK.
+The JSON is included in the `.esriAddinX` file. To change defaults for a packaged copy, edit `Config/EvaluationDefaults.json` inside the archive, then restart ArcGIS Pro.
+
+## Build
+
+ArcGIS Pro 3.3 and the .NET 8 SDK are required.
 
 ```powershell
 dotnet build .\BetterInspector.csproj
 ```
 
-The build packages and registers:
+The build creates and registers:
 
 `bin\Debug\net8.0-windows\BetterInspector.ArcPro.3.3.v.1.0.0.esriAddinX`
 
-The compiled add-in for this version is also committed at [release/BetterInspector.ArcPro.3.3.v.1.0.0.esriAddinX](release/BetterInspector.ArcPro.3.3.v.1.0.0.esriAddinX).
-
-The package filename is controlled by the project assembly name. When changing the version, update the assembly name in `BetterInspector.csproj`, the `defaultAssembly` value in `Config.daml`, and `PackageFileName` in `InspectorConfig.cs` together.
+A compiled copy is also in [release/BetterInspector.ArcPro.3.3.v.1.0.0.esriAddinX](release/BetterInspector.ArcPro.3.3.v.1.0.0.esriAddinX).

@@ -8,7 +8,7 @@ using System.Text.Json;
 
 namespace BetterInspector;
 
-/// <summary>Defaults supplied with the add-in package.</summary>
+/// <summary>Reads the defaults packaged with the add-in.</summary>
 internal static class InspectorSettings
 {
     public static InspectorSettingsState Current { get; private set; } = Load();
@@ -42,7 +42,7 @@ internal static class InspectorSettings
         }
         catch
         {
-            // Invalid package configuration must not prevent ArcGIS Pro from loading the add-in.
+            // A bad config file should not stop the add-in from loading.
         }
 
         var defaults = new InspectorSettingsState();
