@@ -13,6 +13,7 @@ namespace BetterInspector;
 internal static class InspectorSettings
 {
     public static InspectorSettingsState Current { get; private set; } = Load();
+    public static string? LoadWarning { get; private set; }
 
     private static InspectorSettingsState Load()
     {
@@ -22,8 +23,16 @@ internal static class InspectorSettings
             {
                 if (File.Exists(settingsPath))
                 {
-                    var settings = DeserializeSettingsFile(settingsPath, File.ReadAllText(settingsPath));
-                    if (settings != null) return settings;
+                    try
+                    {
+                        var settings = DeserializeSettingsFile(settingsPath, File.ReadAllText(settingsPath));
+                        if (settings != null) return settings;
+                        LoadWarning = $"{Path.GetFileName(settingsPath)} does not contain Better Inspector settings.";
+                    }
+                    catch (Exception ex)
+                    {
+                        LoadWarning = $"{Path.GetFileName(settingsPath)} could not be read ({ex.Message}).";
+                    }
                 }
             }
 
@@ -52,9 +61,9 @@ internal static class InspectorSettings
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // A bad config file should not stop the add-in from loading.
+            LoadWarning = $"Packaged settings could not be read ({ex.Message}).";
         }
 
         var defaults = new InspectorSettingsState();

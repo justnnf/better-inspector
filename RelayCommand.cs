@@ -63,6 +63,10 @@ internal class RelayCommandAsync : ICommand
             RaiseCanExecuteChanged();
             await _execute();
         }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Unhandled command exception: {ex}");
+        }
         finally
         {
             _isExecuting = false;

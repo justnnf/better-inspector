@@ -3,7 +3,7 @@
   "EvaluateValidationRulesByDefault": true,
   "UseVisibleEvaluationExtentByDefault": true,
   "EvaluateModifiedVersionByDefault": true,
-  "RunEvaluationAsynchronouslyByDefault": false,
+  "RunEvaluationAsynchronouslyByDefault": true,
   "ErrorInspectorColumns": [
     { "Key": "ShapeIndicator", "Order": 1, "IsVisible": true },
     { "Key": "RuleType", "Order": 2, "IsVisible": true },

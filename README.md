@@ -16,7 +16,7 @@ Add the Error Layers to the map, open the **Better Inspector** tab, and click **
 
 ## Defaults
 
-The defaults are in [Config/EvaluationDefaults.json](Config/EvaluationDefaults.json).
+The defaults are in [Config/BetterInspector.dll.config](Config/BetterInspector.dll.config).
 
 You can set the default evaluation options there:
 
@@ -26,9 +26,9 @@ You can set the default evaluation options there:
 - Modified features in the current version
 - Asynchronous evaluation for feature services
 
-`ErrorInspectorColumns` controls the table layout. Each column has a `Key`, `Order`, and `IsVisible` value.
+`ErrorInspectorColumns` controls the table layout. Each `Column` has a `Key`, `Order`, and `IsVisible` attribute.
 
-The JSON is included in the `.esriAddinX` file. To change defaults for a packaged copy, edit `Config/EvaluationDefaults.json` inside the archive, then restart ArcGIS Pro.
+The settings file is included in the `.esriAddinX` file at `Install/<assembly>.dll.config`. To change defaults for a packaged copy, edit that file inside the archive, then restart ArcGIS Pro.
 
 ## Build
 
@@ -40,6 +40,6 @@ dotnet build .\BetterInspector.csproj
 
 The build creates and registers:
 
-`bin\Debug\net8.0-windows\BetterInspector.ArcPro.3.3.v.1.0.0.esriAddinX`
+`bin\Debug\net8.0-windows\BetterInspector.ArcPro.3.3.v.<version>.esriAddinX`
 
-A compiled copy is also in [release/BetterInspector.ArcPro.3.3.v.1.0.0.esriAddinX](release/BetterInspector.ArcPro.3.3.v.1.0.0.esriAddinX).
+A versioned compiled copy is also written to `release`.

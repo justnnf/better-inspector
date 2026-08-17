@@ -15,7 +15,7 @@ internal sealed class ErrorInspectionItem
     public required string Message { get; init; }
     public required string ExceptionStatus { get; init; }
     public required string FeatureClass { get; init; }
-    public required string AssetGroup { get; init; }
+    public required string AssetGroup { get; set; }
     public required string FeatureObjectId { get; init; }
     public required string FeatureGlobalId { get; init; }
     public required string Description { get; init; }

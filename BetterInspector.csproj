@@ -4,7 +4,7 @@
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <!-- Set this one value for each release. The package and its manifest derive from it. -->
-    <Version>1.0.2</Version>
+    <Version>1.2.0</Version>
     <AssemblyName>BetterInspector.ArcPro.3.3.v.$(Version)</AssemblyName>
     <RootNamespace>BetterInspector</RootNamespace>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

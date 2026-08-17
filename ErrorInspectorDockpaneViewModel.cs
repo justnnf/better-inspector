@@ -18,6 +18,7 @@ internal sealed class ErrorInspectorDockpaneViewModel : DockPane
     private ErrorInspectionItem? _selectedError;
     private string _status = "Refresh to read attribute-rule Error Layers from the active map.";
     private bool _isRefreshing;
+    private bool _refreshPending;
     private bool _hasEvaluationSource;
     private EvaluationExtent _selectedExtent;
     private bool _modifiedInVersion;
@@ -37,7 +38,7 @@ internal sealed class ErrorInspectorDockpaneViewModel : DockPane
         _evaluateValidation = defaults.EvaluateValidationRulesByDefault;
         _runAsynchronously = defaults.RunEvaluationAsynchronouslyByDefault;
 
-        RefreshCommand = new RelayCommandAsync(RefreshAsync, () => !_isRefreshing);
+        RefreshCommand = new RelayCommandAsync(async () => { await RefreshAsync(); }, () => !_isRefreshing);
         ZoomToErrorCommand = new RelayCommandAsync(ZoomToErrorAsync, () => SelectedError?.Geometry != null);
         SelectSourceFeatureCommand = new RelayCommandAsync(SelectSourceFeatureAsync,
             () => SelectedError?.SourceObjectId > 0);
@@ -191,8 +192,13 @@ internal sealed class ErrorInspectorDockpaneViewModel : DockPane
         private set => SetProperty(ref _status, value, () => Status);
     }
 
-    private async Task RefreshAsync()
+    private async Task<bool> RefreshAsync(bool allowWhileBusy = false)
     {
+        if (_isRefreshing && !allowWhileBusy)
+        {
+            _refreshPending = true;
+            return false;
+        }
         try
         {
             _isRefreshing = true;
@@ -214,16 +220,29 @@ internal sealed class ErrorInspectorDockpaneViewModel : DockPane
                 ? "No Error Layers were found. Add Error Point, Error Line, Error Polygon, or Error Table to the active map."
                 : $"Loaded {Errors.Count:n0} error(s) from {result.ErrorLayerCount} Error Layer(s)." +
                   (ShowVisibleErrors ? " Showing errors in the current map extent." : string.Empty);
+            if (result.ScanWarnings.Count > 0)
+                Status += $" Skipped {result.ScanWarnings.Count:n0} unreadable Error Layer(s); see the diagnostic log for details.";
+            if (!string.IsNullOrWhiteSpace(InspectorSettings.LoadWarning))
+                Status += $" Configuration warning: {InspectorSettings.LoadWarning}";
+            foreach (var warning in result.ScanWarnings)
+                System.Diagnostics.Debug.WriteLine($"Error-layer scan warning: {warning}");
+            return true;
         }
         catch (Exception ex)
         {
             Status = $"Error refresh failed: {ex.Message}";
+            return false;
         }
         finally
         {
             _isRefreshing = false;
             RefreshCommand.RaiseCanExecuteChanged();
             EvaluateCommand.RaiseCanExecuteChanged();
+            if (_refreshPending)
+            {
+                _refreshPending = false;
+                _ = RefreshAsync();
+            }
         }
     }
 
@@ -352,7 +371,13 @@ internal sealed class ErrorInspectorDockpaneViewModel : DockPane
             var result = await QueuedTask.Run(() =>
                 _service.EvaluateRules(ruleType, SelectedExtent, ModifiedInVersion,
                     IsFeatureServiceWorkspace && RunAsynchronously));
-            await RefreshAsync();
+            var refreshSucceeded = await RefreshAsync(allowWhileBusy: true);
+            if (!refreshSucceeded)
+            {
+                Status = $"{operationName} completed with {result.NumberOfErrors:n0} error(s), " +
+                    "but the Error Layers could not be refreshed. " + Status;
+                return;
+            }
             Status = $"{operationName} completed with {result.NumberOfErrors:n0} error(s). " +
                 $"Loaded {Errors.Count:n0} error(s) from the Error Layers." +
                 (result.RanAsynchronously ? " Server-side asynchronous evaluation was used." : string.Empty) +
@@ -433,15 +458,24 @@ internal sealed class ErrorInspectorDockpaneViewModel : DockPane
         if (item == null) return;
         try
         {
+            _isRefreshing = true;
+            MarkExceptionCommand.RaiseCanExecuteChanged();
+            ClearExceptionCommand.RaiseCanExecuteChanged();
             var action = isException ? "Marking error as exception" : "Clearing error exception";
             Status = $"{action}...";
             await QueuedTask.Run(() => _service.SetException(item.ErrorType, item.ObjectId, isException));
             Status = isException ? "Error marked as an exception. Refreshing Error Layers..." : "Error exception cleared. Refreshing Error Layers...";
-            await RefreshAsync();
+            await RefreshAsync(allowWhileBusy: true);
         }
         catch (Exception ex)
         {
             Status = $"Could not update the exception: {ex.Message}";
+        }
+        finally
+        {
+            _isRefreshing = false;
+            MarkExceptionCommand.RaiseCanExecuteChanged();
+            ClearExceptionCommand.RaiseCanExecuteChanged();
         }
     }
 }

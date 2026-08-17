@@ -22,22 +22,41 @@ internal sealed class ErrorInspectionService
         var visibleExtent = visibleExtentOnly ? mapView.Extent : null;
         var items = new List<ErrorInspectionItem>();
         var workspaces = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var scanWarnings = new List<string>();
         var scannedLayers = 0;
         using var sourceResolver = ErrorSourceResolver.TryCreate(map);
 
-        foreach (var layer in map.GetLayersAsFlattenedList().OfType<FeatureLayer>().Where(IsErrorLayer))
+        foreach (var layer in map.GetLayersAsFlattenedList().OfType<FeatureLayer>())
         {
-            scannedLayers++;
-            AddWorkspace(layer.GetTable(), workspaces);
-            items.AddRange(ReadFeatures(layer, sourceResolver));
+            try
+            {
+                if (!IsErrorLayer(layer)) continue;
+                scannedLayers++;
+                AddWorkspace(layer.GetTable(), workspaces);
+                items.AddRange(ReadFeatures(layer, sourceResolver));
+            }
+            catch (Exception ex)
+            {
+                scanWarnings.Add($"{layer.Name}: {ex.Message}");
+            }
         }
 
-        foreach (var table in map.GetStandaloneTablesAsFlattenedList().Where(IsErrorTable))
+        foreach (var table in map.GetStandaloneTablesAsFlattenedList())
         {
-            scannedLayers++;
-            AddWorkspace(table.GetTable(), workspaces);
-            items.AddRange(ReadTable(table, sourceResolver));
+            try
+            {
+                if (!IsErrorTable(table)) continue;
+                scannedLayers++;
+                AddWorkspace(table.GetTable(), workspaces);
+                items.AddRange(ReadTable(table, sourceResolver));
+            }
+            catch (Exception ex)
+            {
+                scanWarnings.Add($"{table.Name}: {ex.Message}");
+            }
         }
+
+        sourceResolver?.PopulateAssetGroups(items);
 
         if (visibleExtent != null)
         {
@@ -47,7 +66,7 @@ internal sealed class ErrorInspectionService
 
         var capabilities = GetEvaluationCapabilities(map);
         return new ErrorInspectionScanResult(items, scannedLayers, workspaces.ToArray(),
-            capabilities.IsFeatureService, capabilities.CanEvaluateVersionChanges);
+            capabilities.IsFeatureService, capabilities.CanEvaluateVersionChanges, scanWarnings);
     }
 
     /// <summary>Runs the selected calculation or validation rules.</summary>
@@ -55,7 +74,8 @@ internal sealed class ErrorInspectionService
         EvaluationExtent extentScope, bool changesInVersion, bool runAsynchronously)
     {
         var mapView = ResolveMapView();
-        var map = mapView.Map;
+        var map = mapView.Map ?? throw new InvalidOperationException(
+            "The active map is still loading. Wait for it to finish loading and run validation again.");
         if (!HasErrorLayers(map))
             throw new InvalidOperationException("No Error Layers are available in the active map.");
 
@@ -86,7 +106,9 @@ internal sealed class ErrorInspectionService
         }
 
         // This also creates an undoable edit operation and refreshes affected layers.
-        var result = manager.EvaluateInEditOperation(description);
+        var result = manager.EvaluateInEditOperation(description) ?? throw new InvalidOperationException(
+            "The validation service completed without returning an evaluation result. " +
+            "Check the service logs for the corresponding validation request.");
         var scopeNotice = changesInVersion && !useVersionChanges
             ? "This local or nonversioned workspace has no version delta; pending rows were evaluated using EntireVersion scope and the selected extent."
             : string.Empty;
@@ -155,32 +177,74 @@ internal sealed class ErrorInspectionService
 
     private static Geodatabase OpenUtilityNetworkGeodatabase(Map map)
     {
-        var utilityNetworkLayer = map.GetLayersAsFlattenedList()
-            .OfType<UtilityNetworkLayer>()
-            .FirstOrDefault()
-            ?? throw new InvalidOperationException(
-                "No utility network layer was found. Add the utility network layer that owns these Error Layers to the active map.");
+        var errorWorkspacePath = GetErrorWorkspacePath(map);
+        foreach (var utilityNetworkLayer in map.GetLayersAsFlattenedList().OfType<UtilityNetworkLayer>())
+        {
+            using var utilityNetwork = utilityNetworkLayer.GetUtilityNetwork();
+            if (utilityNetwork == null) continue;
+            using var definition = utilityNetwork.GetDefinition();
+            foreach (var source in definition.GetNetworkSources())
+            {
+                using var sourceTable = utilityNetwork.GetTable(source);
+                var datastore = sourceTable.GetDatastore();
+                if (datastore is not Geodatabase geodatabase)
+                {
+                    datastore.Dispose();
+                    continue;
+                }
 
-        using var utilityNetwork = utilityNetworkLayer.GetUtilityNetwork()
-            ?? throw new InvalidOperationException("ArcGIS Pro could not open the utility network from the active map.");
-        using var definition = utilityNetwork.GetDefinition();
-        var source = definition.GetNetworkSources().FirstOrDefault()
-            ?? throw new InvalidOperationException("The utility network does not expose a source table for rule evaluation.");
-        using var sourceTable = utilityNetwork.GetTable(source);
-        var datastore = sourceTable.GetDatastore();
-        if (datastore is Geodatabase geodatabase)
-            return geodatabase;
+                var sourceWorkspacePath = geodatabase.GetPath()?.AbsolutePath;
+                if (string.Equals(sourceWorkspacePath, errorWorkspacePath, StringComparison.OrdinalIgnoreCase))
+                    return geodatabase;
+                geodatabase.Dispose();
+            }
+        }
 
-        datastore.Dispose();
-        throw new InvalidOperationException("The utility network source does not expose a geodatabase for attribute-rule evaluation.");
+        throw new InvalidOperationException(
+            "No utility network in the active map uses the same geodatabase as the Error Layers.");
     }
 
-    private static bool IsErrorLayer(FeatureLayer layer) => IsKnownErrorLayerName(layer.Name);
-    private static bool IsErrorTable(StandaloneTable table) => IsKnownErrorLayerName(table.Name);
+    private static string GetErrorWorkspacePath(Map map)
+    {
+        foreach (var layer in map.GetLayersAsFlattenedList().OfType<FeatureLayer>())
+        {
+            if (!IsErrorLayer(layer)) continue;
+            using var table = layer.GetTable();
+            using var datastore = table.GetDatastore();
+            var path = datastore.GetPath()?.AbsolutePath;
+            if (!string.IsNullOrWhiteSpace(path)) return path;
+        }
+        foreach (var tableMember in map.GetStandaloneTablesAsFlattenedList())
+        {
+            if (!IsErrorTable(tableMember)) continue;
+            using var table = tableMember.GetTable();
+            using var datastore = table.GetDatastore();
+            var path = datastore.GetPath()?.AbsolutePath;
+            if (!string.IsNullOrWhiteSpace(path)) return path;
+        }
+        throw new InvalidOperationException("The Error Layers do not expose a usable geodatabase path.");
+    }
+
+    private static bool IsErrorLayer(FeatureLayer layer) =>
+        IsKnownErrorLayerName(layer.Name) || HasAttributeRuleErrorSchema(layer.GetTable());
+
+    private static bool IsErrorTable(StandaloneTable table) =>
+        IsKnownErrorLayerName(table.Name) || HasAttributeRuleErrorSchema(table.GetTable());
 
     private static bool IsKnownErrorLayerName(string name) => ErrorLayerNames.Any(expected =>
         string.Equals(name, expected, StringComparison.OrdinalIgnoreCase) ||
         name.EndsWith($" - {expected}", StringComparison.OrdinalIgnoreCase));
+
+    private static bool HasAttributeRuleErrorSchema(Table table)
+    {
+        using (table)
+        using (var definition = table.GetDefinition())
+        {
+            var fields = definition.GetFields().Select(field => field.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            return fields.Contains("ErrorNumber") && fields.Contains("ErrorMessage") &&
+                   fields.Contains("RuleName") && fields.Contains("IsException");
+        }
+    }
 
     private static void AddWorkspace(Table table, ISet<string> workspaces)
     {
@@ -456,23 +520,64 @@ internal sealed class ErrorInspectionService
                     ResolveMapMember(sourceId, unresolvedClass, string.Empty), sourceObjectId, sourceGlobalId);
             }
 
-            var assetGroup = ResolveAssetGroup(source, sourceObjectId);
             var featureClass = NormalizeName(source.Name);
-            var member = ResolveMapMember(sourceId, featureClass, assetGroup);
-            return new ErrorSourceDetails(featureClass, assetGroup, member, sourceObjectId, sourceGlobalId);
+            var member = ResolveMapMember(sourceId, featureClass, string.Empty);
+            return new ErrorSourceDetails(featureClass, string.Empty, member, sourceObjectId, sourceGlobalId);
         }
 
-        private string ResolveAssetGroup(NetworkSource source, long sourceObjectId)
+        public void PopulateAssetGroups(IReadOnlyList<ErrorInspectionItem> items)
         {
-            if (sourceObjectId <= 0 || string.IsNullOrWhiteSpace(_assetGroupField)) return string.Empty;
+            if (string.IsNullOrWhiteSpace(_assetGroupField)) return;
+            var itemsBySource = items.Where(item => item.SourceObjectId > 0)
+                .GroupBy(ResolveNetworkSource)
+                .Where(group => group.Key != null);
+            foreach (var group in itemsBySource)
+            {
+                try
+                {
+                    PopulateAssetGroups(group.Key!, group.ToArray());
+                }
+                catch
+                {
+                    // Asset-group lookup enriches the inspector; a failed lookup must not hide errors.
+                }
+            }
+        }
+
+        private NetworkSource? ResolveNetworkSource(ErrorInspectionItem item)
+        {
+            if (_sourcesByDatasetId.TryGetValue(item.SourceClassId, out var source)) return source;
+            if (_sourcesById.TryGetValue(item.SourceClassId, out source)) return source;
+            return _sourcesByName.TryGetValue(NormalizeName(item.FeatureClass), out source) ? source : null;
+        }
+
+        private void PopulateAssetGroups(NetworkSource source, IReadOnlyList<ErrorInspectionItem> items)
+        {
             using var table = _utilityNetwork.GetTable(source);
             using var tableDefinition = table.GetDefinition();
-            if (tableDefinition.FindField(_assetGroupField) < 0) return string.Empty;
-            using var cursor = table.Search(new QueryFilter { ObjectIDs = [sourceObjectId] }, false);
-            if (!cursor.MoveNext()) return string.Empty;
-            using var row = cursor.Current;
-            var code = Convert.ToInt32(row[_assetGroupField]);
+            if (tableDefinition.FindField(_assetGroupField) < 0) return;
+            var objectIdField = tableDefinition.GetObjectIDField();
+            var objectIds = items.Select(item => item.SourceObjectId).Distinct().ToArray();
+            var codesByObjectId = new Dictionary<long, int>();
+            using var cursor = table.Search(new QueryFilter { ObjectIDs = objectIds }, false);
+            while (cursor.MoveNext())
+            {
+                using var row = cursor.Current;
+                var objectId = ToInt64(row[objectIdField]);
+                var assetGroupValue = row[_assetGroupField];
+                if (assetGroupValue != null && assetGroupValue != DBNull.Value)
+                    codesByObjectId[objectId] = Convert.ToInt32(assetGroupValue);
+            }
 
+            foreach (var item in items)
+            {
+                if (codesByObjectId.TryGetValue(item.SourceObjectId, out var code))
+                    item.AssetGroup = ResolveAssetGroupName(source, code);
+            }
+        }
+
+        private string ResolveAssetGroupName(NetworkSource source, int code)
+        {
             if (!_assetGroupsBySource.TryGetValue(source.ID, out var namesByCode))
             {
                 namesByCode = [];
@@ -562,6 +667,7 @@ internal sealed record ErrorSourceDetails(string FeatureClass, string AssetGroup
     long ObjectId, string GlobalId);
 
 internal sealed record ErrorInspectionScanResult(IReadOnlyList<ErrorInspectionItem> Items, int ErrorLayerCount,
-    IReadOnlyList<string> EvaluationWorkspaces, bool IsFeatureService, bool CanEvaluateVersionChanges);
+    IReadOnlyList<string> EvaluationWorkspaces, bool IsFeatureService, bool CanEvaluateVersionChanges,
+    IReadOnlyList<string> ScanWarnings);
 internal sealed record EvaluationCapabilities(bool IsFeatureService, bool CanEvaluateVersionChanges);
 internal sealed record RuleEvaluationOutcome(long NumberOfErrors, string ScopeNotice, bool RanAsynchronously);
