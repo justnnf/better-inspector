@@ -5,6 +5,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json;
+using System.Xml.Linq;
 
 namespace BetterInspector;
 
@@ -21,19 +22,28 @@ internal static class InspectorSettings
             {
                 if (File.Exists(settingsPath))
                 {
-                    var settings = Deserialize(File.ReadAllText(settingsPath));
+                    var settings = DeserializeSettingsFile(settingsPath, File.ReadAllText(settingsPath));
                     if (settings != null) return settings;
                 }
             }
 
-            var assemblyName = Assembly.GetExecutingAssembly().GetName().Name;
+            var assemblyName = GetAssemblyName();
             var packageFileName = $"{assemblyName}.esriAddinX";
             var packagePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
                 "ArcGIS", "AddIns", "ArcGISPro", InspectorConfig.AddInId, packageFileName);
             if (File.Exists(packagePath))
             {
                 using var package = ZipFile.OpenRead(packagePath);
-                var entry = package.GetEntry("Config/EvaluationDefaults.json");
+                var entry = package.GetEntry($"Install/{assemblyName}.dll.config");
+                if (entry != null)
+                {
+                    using var reader = new StreamReader(entry.Open());
+                    var settings = DeserializeDllConfig(reader.ReadToEnd());
+                    if (settings != null) return settings;
+                }
+
+                // Compatibility with packages created before the .dll.config file.
+                entry = package.GetEntry("Config/EvaluationDefaults.json");
                 if (entry != null)
                 {
                     using var reader = new StreamReader(entry.Open());
@@ -56,9 +66,18 @@ internal static class InspectorSettings
     {
         var assemblyDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
         if (string.IsNullOrWhiteSpace(assemblyDirectory)) yield break;
+        yield return Path.Combine(assemblyDirectory, $"{GetAssemblyName()}.dll.config");
         yield return Path.Combine(assemblyDirectory, "Config", "EvaluationDefaults.json");
         yield return Path.GetFullPath(Path.Combine(assemblyDirectory, "..", "Config", "EvaluationDefaults.json"));
     }
+
+    private static string GetAssemblyName() => Assembly.GetExecutingAssembly().GetName().Name
+        ?? "BetterInspector";
+
+    private static InspectorSettingsState? DeserializeSettingsFile(string path, string content) =>
+        path.EndsWith(".dll.config", StringComparison.OrdinalIgnoreCase)
+            ? DeserializeDllConfig(content)
+            : Deserialize(content);
 
     private static InspectorSettingsState? Deserialize(string json)
     {
@@ -66,6 +85,44 @@ internal static class InspectorSettings
         settings?.Normalize();
         return settings;
     }
+
+    private static InspectorSettingsState? DeserializeDllConfig(string xml)
+    {
+        var settingsElement = XDocument.Parse(xml).Descendants()
+            .FirstOrDefault(element => element.Name.LocalName == "BetterInspectorSettings");
+        if (settingsElement == null) return null;
+
+        var settings = new InspectorSettingsState();
+        settings.EvaluateCalculationRulesByDefault = ReadBoolean(settingsElement,
+            nameof(settings.EvaluateCalculationRulesByDefault), settings.EvaluateCalculationRulesByDefault);
+        settings.EvaluateValidationRulesByDefault = ReadBoolean(settingsElement,
+            nameof(settings.EvaluateValidationRulesByDefault), settings.EvaluateValidationRulesByDefault);
+        settings.UseVisibleEvaluationExtentByDefault = ReadBoolean(settingsElement,
+            nameof(settings.UseVisibleEvaluationExtentByDefault), settings.UseVisibleEvaluationExtentByDefault);
+        settings.EvaluateModifiedVersionByDefault = ReadBoolean(settingsElement,
+            nameof(settings.EvaluateModifiedVersionByDefault), settings.EvaluateModifiedVersionByDefault);
+        settings.RunEvaluationAsynchronouslyByDefault = ReadBoolean(settingsElement,
+            nameof(settings.RunEvaluationAsynchronouslyByDefault), settings.RunEvaluationAsynchronouslyByDefault);
+
+        var columns = settingsElement.Descendants().Where(element => element.Name.LocalName == "Column")
+            .Select(column => new ErrorInspectorColumnOption
+            {
+                Key = (string?)column.Attribute("Key") ?? string.Empty,
+                Order = ReadInteger(column, "Order"),
+                IsVisible = ReadBoolean(column, "IsVisible", true)
+            })
+            .Where(column => !string.IsNullOrWhiteSpace(column.Key))
+            .ToList();
+        if (columns.Count > 0) settings.ErrorInspectorColumns = columns;
+        settings.Normalize();
+        return settings;
+    }
+
+    private static bool ReadBoolean(XElement element, string attributeName, bool defaultValue) =>
+        bool.TryParse((string?)element.Attribute(attributeName), out var value) ? value : defaultValue;
+
+    private static int ReadInteger(XElement element, string attributeName) =>
+        int.TryParse((string?)element.Attribute(attributeName), out var value) ? value : 0;
 }
 
 internal sealed class InspectorSettingsState

@@ -15,6 +15,9 @@
   <ItemGroup>
     <!-- The source manifest is materialized with the current Version during the build. -->
     <Content Remove="Config.daml" />
+    <Content Include="Config\BetterInspector.dll.config">
+      <Link>Install\$(AssemblyName).dll.config</Link>
+    </Content>
     <Content Include="Config\EvaluationDefaults.json" />
     <Content Include="Images\AddInDesktop16.png" />
     <Content Include="Images\AddInDesktop32.png" />
