@@ -4,3 +4,5 @@ obj/
 *.user
 *.suo
 Images/ErrorInspector-*.png
+/Images/AddInDesktop16.png
+/Images/AddInDesktop32.png
