@@ -6,7 +6,7 @@
         xsi:schemaLocation="http://schemas.esri.com/DADF/Registry file:///C:/Program Files/ArcGIS/Pro/bin/ArcGIS.Desktop.Framework.xsd">
   <AddInInfo id="{D4C0DF7F-2EA3-41FE-9998-7DCE60A8FB8B}"
              name="Better Inspector"
-             version="1.0.0"
+             version="1.0.1"
              desktopVersion="3.3"
              product="ArcGISPro">
     <Name>Better Inspector</Name>

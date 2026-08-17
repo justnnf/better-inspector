@@ -3,17 +3,18 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
-    <AssemblyName>BetterInspector.ArcPro.3.3.v.1.0.0</AssemblyName>
+    <!-- Set this one value for each release. The package and its manifest derive from it. -->
+    <Version>1.0.1</Version>
+    <AssemblyName>BetterInspector.ArcPro.3.3.v.$(Version)</AssemblyName>
     <RootNamespace>BetterInspector</RootNamespace>
-    <Version>1.0.0</Version>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <NoWarn>CA1416</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <None Remove="Config.daml" />
-    <Content Include="Config.daml" />
+    <!-- The source manifest is materialized with the current Version during the build. -->
+    <Content Remove="Config.daml" />
     <Content Include="Config\EvaluationDefaults.json" />
     <Content Include="Images\AddInDesktop16.png" />
     <Content Include="Images\AddInDesktop32.png" />
@@ -29,5 +30,31 @@
     <Reference Include="ArcGIS.Desktop.Editing"><HintPath>$(UserProfile)\.nuget\packages\esri.arcgispro.extensions30\3.3.0.52636\ref\net8.0-windows7.0\ArcGIS.Desktop.Editing.dll</HintPath><CopyLocal>False</CopyLocal><Private>False</Private></Reference>
     <Reference Include="ArcGIS.Desktop.Extensions"><HintPath>$(UserProfile)\.nuget\packages\esri.arcgispro.extensions30\3.3.0.52636\ref\net8.0-windows7.0\ArcGIS.Desktop.Extensions.dll</HintPath><CopyLocal>False</CopyLocal><Private>False</Private></Reference>
   </ItemGroup>
+  <PropertyGroup>
+    <ReleasePackagePath>$(MSBuildProjectDirectory)\release\BetterInspector.ArcPro.3.3.v.$(Version).esriAddinX</ReleasePackagePath>
+  </PropertyGroup>
+  <Target Name="PrepareVersionedAddInConfig" BeforeTargets="ArcGISInstallOutput">
+    <PropertyGroup>
+      <GeneratedConfigPath>$(IntermediateOutputPath)BetterInspector.Config.daml</GeneratedConfigPath>
+    </PropertyGroup>
+    <ItemGroup>
+      <Content Include="$(GeneratedConfigPath)">
+        <Link>Config.daml</Link>
+      </Content>
+    </ItemGroup>
+    <Copy SourceFiles="Config.daml" DestinationFiles="$(GeneratedConfigPath)" />
+    <XmlPoke XmlInputPath="$(GeneratedConfigPath)"
+             Query="/*[local-name()='ArcGIS']/@defaultAssembly"
+             Value="$(AssemblyName).dll" />
+    <XmlPoke XmlInputPath="$(GeneratedConfigPath)"
+             Query="/*[local-name()='ArcGIS']/*[local-name()='AddInInfo']/@version"
+             Value="$(Version)" />
+  </Target>
+  <Target Name="CopyAddInPackageToRelease" AfterTargets="PackageArcGISContents">
+    <MakeDir Directories="$(MSBuildProjectDirectory)\release" />
+    <Copy SourceFiles="$(PackageFile)" DestinationFiles="$(ReleasePackagePath)"
+          SkipUnchangedFiles="true" Condition="'$(PackageFile)' != ''" />
+    <Message Text="Release package: $(ReleasePackagePath)" Importance="High" />
+  </Target>
   <Import Project="Esri.ProApp.SDK.Desktop.local.targets" Condition="Exists('Esri.ProApp.SDK.Desktop.local.targets') AND !Exists('Esri.ArcGISPro.Extensions.targets')" />
 </Project>

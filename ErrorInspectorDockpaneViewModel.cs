@@ -362,7 +362,7 @@ internal sealed class ErrorInspectorDockpaneViewModel : DockPane
         {
             System.Diagnostics.Debug.WriteLine($"EvaluateRules exception: {ex}");
             var diagnostic = FormatException(ex);
-            Status = $"{operationName} failed: {diagnostic}";
+            Status = FormatEvaluationFailure(operationName, ex, diagnostic);
         }
         finally
         {
@@ -384,6 +384,40 @@ internal sealed class ErrorInspectorDockpaneViewModel : DockPane
             lines.Add(message + hresult);
         }
         return string.Join(" -> ", lines.Distinct(StringComparer.OrdinalIgnoreCase));
+    }
+
+    private string FormatEvaluationFailure(string operationName, Exception exception, string diagnostic)
+    {
+        if (!IsServiceTimeout(exception))
+            return $"{operationName} failed: {diagnostic}";
+
+        var nextStep = IsFeatureServiceWorkspace && !RunAsynchronously
+            ? "Try a smaller extent or select Run asynchronously."
+            : "Try a smaller extent or ask the service administrator to increase the service usage timeout.";
+        return $"{operationName} timed out: the validation service exceeded its request time limit. " +
+               $"{nextStep} Technical detail: {diagnostic}";
+    }
+
+    private static bool IsServiceTimeout(Exception exception)
+    {
+        // ArcGIS Pro can surface a service usage-timeout as this otherwise generic
+        // geodatabase HRESULT. Also recognize messages retained by other Pro versions.
+        const int serviceTimeoutHResult = unchecked((int)0x80045308);
+        for (var current = exception; current != null; current = current.InnerException)
+        {
+            if (current.HResult == serviceTimeoutHResult)
+                return true;
+
+            var message = current.Message ?? string.Empty;
+            if (message.Contains("usage timeout", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("timed out", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("timeout", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("internal server error", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("status code 500", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
     }
 
     private bool CanChangeException() => !_isRefreshing && SelectedError != null;
