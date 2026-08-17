@@ -4,7 +4,7 @@
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <!-- Set this one value for each release. The package and its manifest derive from it. -->
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
     <AssemblyName>BetterInspector.ArcPro.3.3.v.$(Version)</AssemblyName>
     <RootNamespace>BetterInspector</RootNamespace>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -33,7 +33,17 @@
   <PropertyGroup>
     <ReleasePackagePath>$(MSBuildProjectDirectory)\release\BetterInspector.ArcPro.3.3.v.$(Version).esriAddinX</ReleasePackagePath>
   </PropertyGroup>
-  <Target Name="PrepareVersionedAddInConfig" BeforeTargets="ArcGISInstallOutput">
+  <Target Name="RemoveStaleAddInBuildArtifacts" BeforeTargets="ArcGISInstallOutput">
+    <!-- The ArcGIS packaging target leaves this staging directory behind when
+         ZipIntermediatePath is unset, which otherwise carries old DLLs forward. -->
+    <RemoveDir Directories="$(IntermediateOutputPath)temp_archive" />
+    <ItemGroup>
+      <StaleAddInBuildArtifacts Include="$(TargetDir)BetterInspector*.dll;$(TargetDir)BetterInspector*.pdb;$(TargetDir)BetterInspector*.deps.json;$(TargetDir)BetterInspector*.esriAddinX" />
+      <StaleAddInBuildArtifacts Remove="$(TargetPath);$(TargetDir)$(AssemblyName).pdb;$(TargetDir)$(AssemblyName).deps.json" />
+    </ItemGroup>
+    <Delete Files="@(StaleAddInBuildArtifacts)" />
+  </Target>
+  <Target Name="PrepareVersionedAddInConfig" BeforeTargets="ArcGISInstallOutput" DependsOnTargets="RemoveStaleAddInBuildArtifacts">
     <PropertyGroup>
       <GeneratedConfigPath>$(IntermediateOutputPath)BetterInspector.Config.daml</GeneratedConfigPath>
     </PropertyGroup>

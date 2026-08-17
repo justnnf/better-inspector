@@ -26,8 +26,10 @@ internal static class InspectorSettings
                 }
             }
 
+            var assemblyName = Assembly.GetExecutingAssembly().GetName().Name;
+            var packageFileName = $"{assemblyName}.esriAddinX";
             var packagePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                "ArcGIS", "AddIns", "ArcGISPro", InspectorConfig.AddInId, InspectorConfig.PackageFileName);
+                "ArcGIS", "AddIns", "ArcGISPro", InspectorConfig.AddInId, packageFileName);
             if (File.Exists(packagePath))
             {
                 using var package = ZipFile.OpenRead(packagePath);
