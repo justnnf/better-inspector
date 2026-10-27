@@ -222,7 +222,9 @@ internal sealed class ErrorInspectorDockpaneViewModel : DockPane
                 : $"Loaded {Errors.Count:n0} error(s) from {result.ErrorLayerCount} Error Layer(s)." +
                   (ShowVisibleErrors ? " Showing errors in the current map extent." : string.Empty);
             if (result.ScanWarnings.Count > 0)
-                Status += $" Skipped {result.ScanWarnings.Count:n0} unreadable Error Layer(s); see the diagnostic log for details.";
+                Status += $" Skipped {result.ScanWarnings.Count:n0} unreadable Error Layer(s): " +
+                    string.Join(" | ", result.ScanWarnings.Take(4)) +
+                    (result.ScanWarnings.Count > 4 ? " | More details in the debug output." : string.Empty);
             if (!string.IsNullOrWhiteSpace(InspectorSettings.LoadWarning))
                 Status += $" Configuration warning: {InspectorSettings.LoadWarning}";
             foreach (var warning in result.ScanWarnings)
@@ -268,9 +270,15 @@ internal sealed class ErrorInspectorDockpaneViewModel : DockPane
                 var filter = new QueryFilter { ObjectIDs = [item.SourceObjectId] };
                 var sourceClass = item.FeatureClass;
                 var candidates = new List<MapMember>();
+                var mapTables = map.GetStandaloneTablesAsFlattenedList();
+                var availableTables = mapTables.Where(table => table is not SubtypeGroupTable)
+                    .Concat(mapTables.OfType<SubtypeGroupTable>().SelectMany(group => group.StandaloneTables))
+                    .Distinct().ToArray();
                 var availableMembers = map.GetLayersAsFlattenedList().OfType<FeatureLayer>()
-                    .Cast<MapMember>().Concat(map.GetStandaloneTablesAsFlattenedList()).ToArray();
-                if (item.SourceMapMember != null && availableMembers.Contains(item.SourceMapMember))
+                    .Cast<MapMember>().Concat(availableTables).ToArray();
+                if (item.SourceMapMember is SubtypeGroupTable groupTable)
+                    candidates.AddRange(groupTable.StandaloneTables.Where(table => availableTables.Contains(table)));
+                else if (item.SourceMapMember != null && availableMembers.Contains(item.SourceMapMember))
                     candidates.Add(item.SourceMapMember);
 
                 foreach (var layer in availableMembers.OfType<FeatureLayer>())
@@ -285,7 +293,7 @@ internal sealed class ErrorInspectorDockpaneViewModel : DockPane
                         System.Diagnostics.Debug.WriteLine($"Source candidate skipped {layer.Name}: {ex}");
                     }
                 }
-                foreach (var tableMember in availableMembers.OfType<StandaloneTable>())
+                foreach (var tableMember in availableTables)
                 {
                     try
                     {
@@ -310,8 +318,10 @@ internal sealed class ErrorInspectorDockpaneViewModel : DockPane
                                     if (selection.GetCount() > 0) return candidate;
                                 break;
                             case StandaloneTable standaloneTable:
+                                if (!standaloneTable.IsSelectable) break;
                                 using (var selection = standaloneTable.Select(filter, SelectionCombinationMethod.New))
-                                    if (selection.GetCount() > 0) return candidate;
+                                    if (selection.GetCount() > 0 && standaloneTable.SelectionCount > 0)
+                                        return candidate;
                                 break;
                         }
                     }

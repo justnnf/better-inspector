@@ -21,40 +21,45 @@ internal sealed class ErrorInspectionService
         var map = mapView.Map ?? throw new InvalidOperationException("The active map is still loading. Use Refresh Error Layers once it is ready.");
         var visibleExtent = visibleExtentOnly ? mapView.Extent : null;
         var items = new List<ErrorInspectionItem>();
-        var workspaces = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var scanWarnings = new List<string>();
         var scannedLayers = 0;
         using var sourceResolver = ErrorSourceResolver.TryCreate(map);
 
         foreach (var layer in map.GetLayersAsFlattenedList().OfType<FeatureLayer>())
         {
+            var isErrorLayer = false;
             try
             {
-                if (!IsErrorLayer(layer)) continue;
+                if (!(isErrorLayer = IsErrorLayer(layer))) continue;
                 var layerItems = ReadFeatures(layer, sourceResolver).ToArray();
-                AddWorkspace(layer.GetTable(), workspaces);
                 items.AddRange(layerItems);
                 scannedLayers++;
             }
             catch (Exception ex)
             {
-                scanWarnings.Add($"{layer.Name}: {ex.Message}");
+                if (isErrorLayer || IsKnownErrorLayerName(layer.Name))
+                    scanWarnings.Add($"{layer.Name}: {ex.Message}");
+                else
+                    System.Diagnostics.Debug.WriteLine($"Non-error layer probe skipped {layer.Name}: {ex}");
             }
         }
 
         foreach (var table in map.GetStandaloneTablesAsFlattenedList())
         {
+            var isErrorTable = false;
             try
             {
-                if (!IsErrorTable(table)) continue;
+                if (!(isErrorTable = IsErrorTable(table))) continue;
                 var tableItems = ReadTable(table, sourceResolver).ToArray();
-                AddWorkspace(table.GetTable(), workspaces);
                 items.AddRange(tableItems);
                 scannedLayers++;
             }
             catch (Exception ex)
             {
-                scanWarnings.Add($"{table.Name}: {ex.Message}");
+                if (isErrorTable || IsKnownErrorLayerName(table.Name))
+                    scanWarnings.Add($"{table.Name}: {ex.Message}");
+                else
+                    System.Diagnostics.Debug.WriteLine($"Non-error table probe skipped {table.Name}: {ex}");
             }
         }
 
@@ -67,7 +72,7 @@ internal sealed class ErrorInspectionService
         }
 
         var capabilities = GetEvaluationCapabilities(map);
-        return new ErrorInspectionScanResult(items, scannedLayers, workspaces.ToArray(),
+        return new ErrorInspectionScanResult(items, scannedLayers,
             capabilities.IsFeatureService, capabilities.CanEvaluateVersionChanges, scanWarnings);
     }
 
@@ -279,16 +284,6 @@ internal sealed class ErrorInspectionService
             var fields = definition.GetFields().Select(field => field.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
             return fields.Contains("ErrorNumber") && fields.Contains("ErrorMessage") &&
                    fields.Contains("RuleName") && fields.Contains("IsException");
-        }
-    }
-
-    private static void AddWorkspace(Table table, ISet<string> workspaces)
-    {
-        using (table)
-        {
-            using var datastore = table.GetDatastore();
-            var path = datastore.GetPath()?.AbsolutePath;
-            if (!string.IsNullOrWhiteSpace(path)) workspaces.Add(path);
         }
     }
 
@@ -788,7 +783,7 @@ internal sealed record ErrorSourceDetails(string FeatureClass, string AssetGroup
     long ObjectId, string GlobalId);
 
 internal sealed record ErrorInspectionScanResult(IReadOnlyList<ErrorInspectionItem> Items, int ErrorLayerCount,
-    IReadOnlyList<string> EvaluationWorkspaces, bool IsFeatureService, bool CanEvaluateVersionChanges,
+    bool IsFeatureService, bool CanEvaluateVersionChanges,
     IReadOnlyList<string> ScanWarnings);
 internal sealed record EvaluationCapabilities(bool IsFeatureService, bool CanEvaluateVersionChanges);
 internal sealed record RuleEvaluationOutcome(long NumberOfErrors, string ScopeNotice, bool RanAsynchronously);
