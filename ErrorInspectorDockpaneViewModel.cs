@@ -8,6 +8,7 @@ using ArcGIS.Desktop.Framework;
 using ArcGIS.Desktop.Framework.Contracts;
 using ArcGIS.Desktop.Framework.Threading.Tasks;
 using ArcGIS.Desktop.Mapping;
+using ArcGIS.Desktop.Core;
 using ArcGIS.Core.Data;
 
 namespace BetterInspector;
@@ -267,45 +268,86 @@ internal sealed class ErrorInspectorDockpaneViewModel : DockPane
                 var filter = new QueryFilter { ObjectIDs = [item.SourceObjectId] };
                 var sourceClass = item.FeatureClass;
                 var candidates = new List<MapMember>();
-                if (item.SourceMapMember != null) candidates.Add(item.SourceMapMember);
+                var availableMembers = map.GetLayersAsFlattenedList().OfType<FeatureLayer>()
+                    .Cast<MapMember>().Concat(map.GetStandaloneTablesAsFlattenedList()).ToArray();
+                if (item.SourceMapMember != null && availableMembers.Contains(item.SourceMapMember))
+                    candidates.Add(item.SourceMapMember);
 
-                foreach (var layer in map.GetLayersAsFlattenedList().OfType<FeatureLayer>())
+                foreach (var layer in availableMembers.OfType<FeatureLayer>())
                 {
-                    using var table = layer.GetTable();
-                    if (MatchesSource(table, item.SourceClassId, sourceClass)) candidates.Add(layer);
+                    try
+                    {
+                        using var table = layer.GetTable();
+                        if (MatchesSource(table, item.SourceClassId, sourceClass)) candidates.Add(layer);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Source candidate skipped {layer.Name}: {ex}");
+                    }
                 }
-                foreach (var tableMember in map.GetStandaloneTablesAsFlattenedList())
+                foreach (var tableMember in availableMembers.OfType<StandaloneTable>())
                 {
-                    using var table = tableMember.GetTable();
-                    if (MatchesSource(table, item.SourceClassId, sourceClass)) candidates.Add(tableMember);
+                    try
+                    {
+                        using var table = tableMember.GetTable();
+                        if (MatchesSource(table, item.SourceClassId, sourceClass)) candidates.Add(tableMember);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Source candidate skipped {tableMember.Name}: {ex}");
+                    }
                 }
 
+                Exception? selectionFailure = null;
                 foreach (var candidate in candidates.Distinct())
                 {
-                    switch (candidate)
+                    try
                     {
-                        case FeatureLayer featureLayer:
-                            using (var selection = featureLayer.Select(filter, SelectionCombinationMethod.New))
-                                if (selection.GetCount() > 0) return featureLayer.Name;
-                            break;
-                        case StandaloneTable standaloneTable:
-                            using (var selection = standaloneTable.Select(filter, SelectionCombinationMethod.New))
-                                if (selection.GetCount() > 0) return standaloneTable.Name;
-                            break;
+                        switch (candidate)
+                        {
+                            case FeatureLayer featureLayer:
+                                using (var selection = featureLayer.Select(filter, SelectionCombinationMethod.New))
+                                    if (selection.GetCount() > 0) return candidate;
+                                break;
+                            case StandaloneTable standaloneTable:
+                                using (var selection = standaloneTable.Select(filter, SelectionCombinationMethod.New))
+                                    if (selection.GetCount() > 0) return candidate;
+                                break;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        selectionFailure = ex;
+                        System.Diagnostics.Debug.WriteLine($"Source selection failed in {candidate.Name}: {ex}");
                     }
                 }
                 throw new InvalidOperationException(
-                    $"Record {item.SourceObjectId} was not found in a matching source layer or table in the active map.");
+                    $"Record {item.SourceObjectId} was not found in a matching source layer or table in the active map.",
+                    selectionFailure);
             });
-            await FrameworkApplication.SetCurrentToolAsync(InspectorConfig.DefaultSelectionToolId);
-            if (FrameworkApplication.GetPlugInWrapper("esri_editing_ShowAttributes") is ICommand showAttributes &&
-                showAttributes.CanExecute(null))
-                showAttributes.Execute(null);
-            Status = $"Selected source record {item.SourceObjectId} in {selectedMember}.";
+            Status = $"Selected source record {item.SourceObjectId} in {selectedMember.Name}.";
+            try
+            {
+                if (selectedMember is StandaloneTable)
+                    FrameworkApplication.Panes.OpenTablePane(selectedMember, TableViewMode.eSelectedRecords);
+                else
+                {
+                    await FrameworkApplication.SetCurrentToolAsync(InspectorConfig.DefaultSelectionToolId);
+                    if (FrameworkApplication.GetPlugInWrapper("esri_editing_ShowAttributes") is ICommand showAttributes &&
+                        showAttributes.CanExecute(null))
+                        showAttributes.Execute(null);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Selected source UI could not open: {ex}");
+                Status += $" Could not open its details: {FormatException(ex)}";
+            }
         }
         catch (Exception ex)
         {
-            Status = $"Could not select the source feature: {FormatException(ex)}";
+            System.Diagnostics.Debug.WriteLine($"Select source exception: {ex}");
+            Status = $"Could not select the source record: {FormatException(ex)}";
         }
     }
 

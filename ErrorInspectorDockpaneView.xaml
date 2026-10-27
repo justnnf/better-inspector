@@ -48,7 +48,7 @@
                     <MenuItem Header="Mark as exception" Command="{Binding MarkExceptionCommand}" />
                     <MenuItem Header="Clear exception" Command="{Binding ClearExceptionCommand}" />
                     <Separator />
-                    <MenuItem Header="Select Source Feature" Command="{Binding SelectSourceFeatureCommand}" />
+                    <MenuItem Header="Select source record" Command="{Binding SelectSourceFeatureCommand}" />
                     <MenuItem Header="Zoom to error" Command="{Binding ZoomToErrorCommand}" />
                 </ContextMenu>
             </DataGrid.ContextMenu>

@@ -31,9 +31,10 @@ internal sealed class ErrorInspectionService
             try
             {
                 if (!IsErrorLayer(layer)) continue;
-                scannedLayers++;
+                var layerItems = ReadFeatures(layer, sourceResolver).ToArray();
                 AddWorkspace(layer.GetTable(), workspaces);
-                items.AddRange(ReadFeatures(layer, sourceResolver));
+                items.AddRange(layerItems);
+                scannedLayers++;
             }
             catch (Exception ex)
             {
@@ -46,9 +47,10 @@ internal sealed class ErrorInspectionService
             try
             {
                 if (!IsErrorTable(table)) continue;
-                scannedLayers++;
+                var tableItems = ReadTable(table, sourceResolver).ToArray();
                 AddWorkspace(table.GetTable(), workspaces);
-                items.AddRange(ReadTable(table, sourceResolver));
+                items.AddRange(tableItems);
+                scannedLayers++;
             }
             catch (Exception ex)
             {
@@ -183,20 +185,40 @@ internal sealed class ErrorInspectionService
             using var utilityNetwork = utilityNetworkLayer.GetUtilityNetwork();
             if (utilityNetwork == null) continue;
             using var definition = utilityNetwork.GetDefinition();
-            foreach (var source in definition.GetNetworkSources())
+            var sources = definition.GetNetworkSources();
+            try
             {
-                using var sourceTable = utilityNetwork.GetTable(source);
-                var datastore = sourceTable.GetDatastore();
-                if (datastore is not Geodatabase geodatabase)
+                foreach (var source in sources)
                 {
-                    datastore.Dispose();
-                    continue;
+                    try
+                    {
+                        using var sourceTable = utilityNetwork.GetTable(source);
+                        var datastore = sourceTable.GetDatastore();
+                        var keep = false;
+                        try
+                        {
+                            if (datastore is Geodatabase geodatabase &&
+                                string.Equals(geodatabase.GetPath()?.AbsolutePath, errorWorkspacePath,
+                                    StringComparison.OrdinalIgnoreCase))
+                            {
+                                keep = true;
+                                return geodatabase;
+                            }
+                        }
+                        finally
+                        {
+                            if (!keep) datastore.Dispose();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Evaluation source skipped {source.Name}: {ex}");
+                    }
                 }
-
-                var sourceWorkspacePath = geodatabase.GetPath()?.AbsolutePath;
-                if (string.Equals(sourceWorkspacePath, errorWorkspacePath, StringComparison.OrdinalIgnoreCase))
-                    return geodatabase;
-                geodatabase.Dispose();
+            }
+            finally
+            {
+                foreach (var source in sources) source.Dispose();
             }
         }
 
@@ -208,19 +230,33 @@ internal sealed class ErrorInspectionService
     {
         foreach (var layer in map.GetLayersAsFlattenedList().OfType<FeatureLayer>())
         {
-            if (!IsErrorLayer(layer)) continue;
-            using var table = layer.GetTable();
-            using var datastore = table.GetDatastore();
-            var path = datastore.GetPath()?.AbsolutePath;
-            if (!string.IsNullOrWhiteSpace(path)) return path;
+            try
+            {
+                if (!IsErrorLayer(layer)) continue;
+                using var table = layer.GetTable();
+                using var datastore = table.GetDatastore();
+                var path = datastore.GetPath()?.AbsolutePath;
+                if (!string.IsNullOrWhiteSpace(path)) return path;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error workspace skipped {layer.Name}: {ex}");
+            }
         }
         foreach (var tableMember in map.GetStandaloneTablesAsFlattenedList())
         {
-            if (!IsErrorTable(tableMember)) continue;
-            using var table = tableMember.GetTable();
-            using var datastore = table.GetDatastore();
-            var path = datastore.GetPath()?.AbsolutePath;
-            if (!string.IsNullOrWhiteSpace(path)) return path;
+            try
+            {
+                if (!IsErrorTable(tableMember)) continue;
+                using var table = tableMember.GetTable();
+                using var datastore = table.GetDatastore();
+                var path = datastore.GetPath()?.AbsolutePath;
+                if (!string.IsNullOrWhiteSpace(path)) return path;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error workspace skipped {tableMember.Name}: {ex}");
+            }
         }
         throw new InvalidOperationException("The Error Layers do not expose a usable geodatabase path.");
     }
@@ -290,12 +326,18 @@ internal sealed class ErrorInspectionService
     private static ErrorInspectionItem CreateItem(string errorLayer, Row row, IReadOnlyCollection<string> fields,
         string objectIdField, ErrorSourceResolver? sourceResolver, Geometry? geometry)
     {
-        var errorType = GetErrorType(errorLayer);
+        var errorType = geometry?.GeometryType switch
+        {
+            GeometryType.Point => ValidationErrorType.Point,
+            GeometryType.Polyline => ValidationErrorType.Line,
+            GeometryType.Polygon => ValidationErrorType.Polygon,
+            _ => GetErrorType(errorLayer)
+        };
         var errorObjectId = ToInt64(Value(row, fields, objectIdField));
-        var sourceId = ToInt64(FirstRawValue(row, fields,
-            "FeatureClassID", "OriginTableID", "SourceLayerID"));
-        var sourceObjectId = ToInt64(FirstRawValue(row, fields,
-            "FeatureObjectID", "FeatureOID", "OriginObjectID", "FeatureID"));
+        var sourceId = FirstPositiveId(row, fields,
+            "FeatureClassID", "OriginTableID", "SourceLayerID");
+        var sourceObjectId = FirstPositiveId(row, fields,
+            "FeatureObjectID", "FeatureOID", "OriginObjectID", "FeatureID");
         var sourceGlobalId = FirstValue(row, fields, "FeatureGlobalID", "OriginGlobalID");
         var source = sourceResolver?.Resolve(row, errorType, errorObjectId,
                 sourceId, sourceObjectId, sourceGlobalId)
@@ -357,16 +399,22 @@ internal sealed class ErrorInspectionService
 
     private static object? FirstRawValue(Row row, IReadOnlyCollection<string> fields, params string[] candidates)
     {
-        var field = candidates.FirstOrDefault(candidate => fields.Any(name =>
-            string.Equals(name, candidate, StringComparison.OrdinalIgnoreCase)));
-        return field == null ? null : Value(row, fields, field);
+        foreach (var field in candidates)
+        {
+            var value = Value(row, fields, field);
+            if (value != null && value != DBNull.Value) return value;
+        }
+        return null;
     }
 
     private static string FirstValue(Row row, IReadOnlyCollection<string> fields, params string[] candidates)
     {
-        var field = candidates.FirstOrDefault(candidate => fields.Any(name =>
-            string.Equals(name, candidate, StringComparison.OrdinalIgnoreCase)));
-        return field == null ? string.Empty : Convert.ToString(Value(row, fields, field)) ?? string.Empty;
+        foreach (var field in candidates)
+        {
+            var value = Convert.ToString(Value(row, fields, field));
+            if (!string.IsNullOrWhiteSpace(value)) return value;
+        }
+        return string.Empty;
     }
 
     private static object? Value(Row row, IReadOnlyCollection<string> fields, string field)
@@ -376,6 +424,16 @@ internal sealed class ErrorInspectionService
     }
 
     private static long ToInt64(object? value) => value == null || value == DBNull.Value ? 0 : Convert.ToInt64(value);
+
+    private static long FirstPositiveId(Row row, IReadOnlyCollection<string> fields, params string[] candidates)
+    {
+        foreach (var field in candidates)
+        {
+            if (long.TryParse(Convert.ToString(Value(row, fields, field)), out var id) && id > 0)
+                return id;
+        }
+        return 0;
+    }
 
     private sealed class ErrorSourceResolver : IDisposable
     {
@@ -389,6 +447,7 @@ internal sealed class ErrorInspectionService
         private readonly Dictionary<string, NetworkSource> _sourcesByName = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<long, List<MapMember>> _mapMembersByDatasetId;
         private readonly Dictionary<string, List<MapMember>> _mapMembersByName;
+        private readonly Dictionary<long, string> _mapNamesByDatasetId;
         private readonly Dictionary<long, Dictionary<int, string>> _assetGroupsBySource = [];
         private readonly string _assetGroupField;
 
@@ -403,7 +462,9 @@ internal sealed class ErrorInspectionService
             _sources = sources;
             _mapMembersByDatasetId = mapMembers.ByDatasetId;
             _mapMembersByName = mapMembers.ByName;
+            _mapNamesByDatasetId = mapMembers.NamesByDatasetId;
             _assetGroupField = definition.GetAssetGroupField();
+            if (string.IsNullOrWhiteSpace(_assetGroupField)) _assetGroupField = "ASSETGROUP";
             foreach (var source in sources)
             {
                 _sourcesById[source.ID] = source;
@@ -418,57 +479,95 @@ internal sealed class ErrorInspectionService
                     // System sources are not always available as tables.
                 }
             }
+            foreach (var (datasetId, name) in _mapNamesByDatasetId)
+                if (_sourcesByName.TryGetValue(name, out var source))
+                    _sourcesByDatasetId[datasetId] = source;
         }
 
         public static ErrorSourceResolver? TryCreate(Map map)
         {
-            var layer = map.GetLayersAsFlattenedList().OfType<UtilityNetworkLayer>().FirstOrDefault();
-            if (layer == null) return null;
+            string errorWorkspacePath;
+            try { errorWorkspacePath = GetErrorWorkspacePath(map); }
+            catch { return null; }
 
-            UtilityNetwork? utilityNetwork = null;
-            UtilityNetworkDefinition? definition = null;
-            Geodatabase? geodatabase = null;
-            AttributeRuleManager? attributeRuleManager = null;
-            try
+            foreach (var layer in map.GetLayersAsFlattenedList().OfType<UtilityNetworkLayer>())
             {
-                utilityNetwork = layer.GetUtilityNetwork();
-                if (utilityNetwork == null) return null;
-                definition = utilityNetwork.GetDefinition();
-                var sources = definition.GetNetworkSources();
-                foreach (var source in sources)
+                UtilityNetwork? utilityNetwork = null;
+                UtilityNetworkDefinition? definition = null;
+                IReadOnlyList<NetworkSource>? sources = null;
+                var transferred = false;
+                try
                 {
-                    try
+                    utilityNetwork = layer.GetUtilityNetwork();
+                    if (utilityNetwork == null) continue;
+                    definition = utilityNetwork.GetDefinition();
+                    sources = definition.GetNetworkSources();
+                    foreach (var source in sources)
                     {
-                        using var sourceTable = utilityNetwork.GetTable(source);
-                        var datastore = sourceTable.GetDatastore();
-                        if (datastore is not Geodatabase sourceGeodatabase)
+                        try
                         {
-                            datastore.Dispose();
-                            continue;
+                            using var sourceTable = utilityNetwork.GetTable(source);
+                            var datastore = sourceTable.GetDatastore();
+                            if (datastore is not Geodatabase geodatabase)
+                            {
+                                datastore.Dispose();
+                                continue;
+                            }
+                            string? sourcePath;
+                            try { sourcePath = geodatabase.GetPath()?.AbsolutePath; }
+                            catch
+                            {
+                                geodatabase.Dispose();
+                                throw;
+                            }
+                            if (!string.Equals(sourcePath, errorWorkspacePath, StringComparison.OrdinalIgnoreCase))
+                            {
+                                geodatabase.Dispose();
+                                continue;
+                            }
+                            AttributeRuleManager? manager = null;
+                            try
+                            {
+                                try { manager = geodatabase.GetAttributeRuleManager(); }
+                                catch (Exception ex)
+                                {
+                                    System.Diagnostics.Debug.WriteLine($"Attribute-rule manager unavailable: {ex}");
+                                }
+                                var mapMembers = BuildMapMemberIndex(map);
+                                var resolver = new ErrorSourceResolver(utilityNetwork, definition, geodatabase,
+                                    manager, sources, mapMembers);
+                                transferred = true;
+                                return resolver;
+                            }
+                            catch
+                            {
+                                manager?.Dispose();
+                                geodatabase.Dispose();
+                                throw;
+                            }
                         }
-                        geodatabase = sourceGeodatabase;
-                        attributeRuleManager = geodatabase.GetAttributeRuleManager();
-                        break;
-                    }
-                    catch
-                    {
-                        attributeRuleManager?.Dispose();
-                        geodatabase?.Dispose();
-                        attributeRuleManager = null;
-                        geodatabase = null;
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Source resolver skipped {source.Name}: {ex}");
+                        }
                     }
                 }
-                return new ErrorSourceResolver(utilityNetwork, definition, geodatabase,
-                    attributeRuleManager, sources, BuildMapMemberIndex(map));
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Source resolver skipped {layer.Name}: {ex}");
+                }
+                finally
+                {
+                    if (!transferred)
+                    {
+                        if (sources != null)
+                            foreach (var source in sources) source.Dispose();
+                        definition?.Dispose();
+                        utilityNetwork?.Dispose();
+                    }
+                }
             }
-            catch
-            {
-                attributeRuleManager?.Dispose();
-                geodatabase?.Dispose();
-                definition?.Dispose();
-                utilityNetwork?.Dispose();
-                return null;
-            }
+            return null;
         }
 
         public ErrorSourceDetails Resolve(Row errorRow, ValidationErrorType errorType, long errorObjectId,
@@ -494,14 +593,15 @@ internal sealed class ErrorInspectionService
                         error = _attributeRuleManager.CreateAttributeRuleError(managerRow);
                     }
                     originClass = NormalizeName(error.OriginClass);
-                    sourceObjectId = error.OriginObjectID;
+                    if (error.OriginObjectID > 0) sourceObjectId = error.OriginObjectID;
                     sourceGlobalId = error.OriginGlobalID == Guid.Empty
                         ? sourceGlobalId
                         : error.OriginGlobalID.ToString();
                 }
-                catch
+                catch (Exception ex)
                 {
                     // Older workspaces may only expose the values in the error table.
+                    System.Diagnostics.Debug.WriteLine($"Origin lookup failed for {errorType} error {errorObjectId}: {ex}");
                 }
             }
 
@@ -515,7 +615,8 @@ internal sealed class ErrorInspectionService
             {
                 var unresolvedClass = !string.IsNullOrWhiteSpace(originClass)
                     ? originClass
-                    : sourceId > 0 ? $"Class {sourceId}" : string.Empty;
+                    : _mapNamesByDatasetId.TryGetValue(sourceId, out var mapName)
+                        ? mapName : sourceId > 0 ? $"Class {sourceId}" : string.Empty;
                 return new ErrorSourceDetails(unresolvedClass, string.Empty,
                     ResolveMapMember(sourceId, unresolvedClass, string.Empty), sourceObjectId, sourceGlobalId);
             }
@@ -537,9 +638,10 @@ internal sealed class ErrorInspectionService
                 {
                     PopulateAssetGroups(group.Key!, group.ToArray());
                 }
-                catch
+                catch (Exception ex)
                 {
                     // Asset-group lookup enriches the inspector; a failed lookup must not hide errors.
+                    System.Diagnostics.Debug.WriteLine($"Asset-group lookup failed for {group.Key!.Name}: {ex}");
                 }
             }
         }
@@ -609,21 +711,39 @@ internal sealed class ErrorInspectionService
         {
             var byDatasetId = new Dictionary<long, List<MapMember>>();
             var byName = new Dictionary<string, List<MapMember>>(StringComparer.OrdinalIgnoreCase);
-            foreach (var layer in map.GetLayersAsFlattenedList().OfType<FeatureLayer>().Where(layer => !IsErrorLayer(layer)))
+            var namesByDatasetId = new Dictionary<long, string>();
+            foreach (var layer in map.GetLayersAsFlattenedList().OfType<FeatureLayer>())
             {
-                using var table = layer.GetTable();
-                AddMapMember(byDatasetId, byName, table, layer);
+                try
+                {
+                    if (IsErrorLayer(layer)) continue;
+                    using var table = layer.GetTable();
+                    AddMapMember(byDatasetId, byName, namesByDatasetId, table, layer);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Source index skipped {layer.Name}: {ex}");
+                }
             }
-            foreach (var standaloneTable in map.GetStandaloneTablesAsFlattenedList().Where(table => !IsErrorTable(table)))
+            foreach (var standaloneTable in map.GetStandaloneTablesAsFlattenedList())
             {
-                using var table = standaloneTable.GetTable();
-                AddMapMember(byDatasetId, byName, table, standaloneTable);
+                try
+                {
+                    if (IsErrorTable(standaloneTable)) continue;
+                    using var table = standaloneTable.GetTable();
+                    AddMapMember(byDatasetId, byName, namesByDatasetId, table, standaloneTable);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Source index skipped {standaloneTable.Name}: {ex}");
+                }
             }
-            return new MapMemberIndex(byDatasetId, byName);
+            return new MapMemberIndex(byDatasetId, byName, namesByDatasetId);
         }
 
         private static void AddMapMember(IDictionary<long, List<MapMember>> byDatasetId,
-            IDictionary<string, List<MapMember>> byName, Table table, MapMember mapMember)
+            IDictionary<string, List<MapMember>> byName, IDictionary<long, string> namesByDatasetId,
+            Table table, MapMember mapMember)
         {
             var datasetId = table.GetID();
             if (!byDatasetId.TryGetValue(datasetId, out var idMembers))
@@ -631,6 +751,7 @@ internal sealed class ErrorInspectionService
             idMembers.Add(mapMember);
 
             var key = NormalizeName(table.GetName());
+            namesByDatasetId[datasetId] = key;
             if (!byName.TryGetValue(key, out var nameMembers)) byName[key] = nameMembers = [];
             nameMembers.Add(mapMember);
         }
@@ -659,7 +780,7 @@ internal sealed class ErrorInspectionService
         }
 
         private sealed record MapMemberIndex(Dictionary<long, List<MapMember>> ByDatasetId,
-            Dictionary<string, List<MapMember>> ByName);
+            Dictionary<string, List<MapMember>> ByName, Dictionary<long, string> NamesByDatasetId);
     }
 }
 
