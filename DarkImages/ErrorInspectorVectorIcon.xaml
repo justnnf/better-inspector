@@ -5,33 +5,34 @@
         <DrawingGroup>
           <GeometryDrawing Brush="Transparent" Geometry="M0,0 L32,0 32,32 0,32 Z" />
           <GeometryDrawing>
-            <GeometryDrawing.Brush><SolidColorBrush Color="#59b7e8" Opacity="0.08" /></GeometryDrawing.Brush>
+            <GeometryDrawing.Brush><SolidColorBrush Color="#59b7e8" Opacity="0.12" /></GeometryDrawing.Brush>
+            <GeometryDrawing.Geometry><PathGeometry Figures="M3 6 L11 3.5 20 6 28.5 3.5 28.5 25.5 20 28 11 25.5 3 28 Z" /></GeometryDrawing.Geometry>
+          </GeometryDrawing>
+          <GeometryDrawing>
+            <GeometryDrawing.Brush><SolidColorBrush Color="#93b964" Opacity="0.62" /></GeometryDrawing.Brush>
+            <GeometryDrawing.Geometry><PathGeometry Figures="M3 6 L11 3.5 11 25.5 3 28 Z" /></GeometryDrawing.Geometry>
+          </GeometryDrawing>
+          <GeometryDrawing>
+            <GeometryDrawing.Brush><SolidColorBrush Color="#59b7e8" Opacity="0.62" /></GeometryDrawing.Brush>
+            <GeometryDrawing.Geometry><PathGeometry Figures="M11 3.5 L20 6 20 28 11 25.5 Z" /></GeometryDrawing.Geometry>
+          </GeometryDrawing>
+          <GeometryDrawing>
             <GeometryDrawing.Pen><Pen Brush="#c8c8c8" Thickness="1.1" LineJoin="Round" /></GeometryDrawing.Pen>
             <GeometryDrawing.Geometry><PathGeometry Figures="M3 6 L11 3.5 20 6 28.5 3.5 28.5 25.5 20 28 11 25.5 3 28 Z" /></GeometryDrawing.Geometry>
           </GeometryDrawing>
           <GeometryDrawing>
-            <GeometryDrawing.Pen><Pen Brush="#777777" Thickness="0.65" LineJoin="Round" /></GeometryDrawing.Pen>
+            <GeometryDrawing.Pen><Pen Brush="#777777" Thickness="0.75" LineJoin="Round" /></GeometryDrawing.Pen>
             <GeometryDrawing.Geometry><PathGeometry Figures="M11 3.5 L11 25.5 M20 6 L20 28" /></GeometryDrawing.Geometry>
           </GeometryDrawing>
-          <GeometryDrawing>
-            <GeometryDrawing.Brush><SolidColorBrush Color="#93b964" Opacity="0.26" /></GeometryDrawing.Brush>
-            <GeometryDrawing.Pen><Pen Brush="#93b964" Thickness="0.55" LineJoin="Round" /></GeometryDrawing.Pen>
-            <GeometryDrawing.Geometry><PathGeometry Figures="M5.3 9.5 L8.8 8.4 8.8 22.8 5.3 23.9 Z" /></GeometryDrawing.Geometry>
-          </GeometryDrawing>
-          <GeometryDrawing>
-            <GeometryDrawing.Brush><SolidColorBrush Color="#59b7e8" Opacity="0.28" /></GeometryDrawing.Brush>
-            <GeometryDrawing.Pen><Pen Brush="#59b7e8" Thickness="0.55" LineJoin="Round" /></GeometryDrawing.Pen>
-            <GeometryDrawing.Geometry><PathGeometry Figures="M13.4 8.2 L17.5 9.4 17.5 22.9 13.4 21.7 Z" /></GeometryDrawing.Geometry>
-          </GeometryDrawing>
           <GeometryDrawing Brush="#f07860">
-            <GeometryDrawing.Pen><Pen Brush="#c55843" Thickness="0.65" /></GeometryDrawing.Pen>
-            <GeometryDrawing.Geometry><EllipseGeometry Center="24.25,16" RadiusX="3.1" RadiusY="3.1" /></GeometryDrawing.Geometry>
+            <GeometryDrawing.Pen><Pen Brush="#c55843" Thickness="0.8" /></GeometryDrawing.Pen>
+            <GeometryDrawing.Geometry><EllipseGeometry Center="25.8,25.2" RadiusX="4.5" RadiusY="4.5" /></GeometryDrawing.Geometry>
           </GeometryDrawing>
           <GeometryDrawing>
-            <GeometryDrawing.Pen><Pen Brush="#ffffff" Thickness="1.15" StartLineCap="Round" EndLineCap="Round" /></GeometryDrawing.Pen>
-            <GeometryDrawing.Geometry><LineGeometry StartPoint="24.25,14.1" EndPoint="24.25,16.4" /></GeometryDrawing.Geometry>
+            <GeometryDrawing.Pen><Pen Brush="#ffffff" Thickness="1.45" StartLineCap="Round" EndLineCap="Round" /></GeometryDrawing.Pen>
+            <GeometryDrawing.Geometry><LineGeometry StartPoint="25.8,22.7" EndPoint="25.8,25.4" /></GeometryDrawing.Geometry>
           </GeometryDrawing>
-          <GeometryDrawing Brush="#ffffff"><GeometryDrawing.Geometry><EllipseGeometry Center="24.25,17.6" RadiusX="0.55" RadiusY="0.55" /></GeometryDrawing.Geometry></GeometryDrawing>
+          <GeometryDrawing Brush="#ffffff"><GeometryDrawing.Geometry><EllipseGeometry Center="25.8,27.1" RadiusX="0.7" RadiusY="0.7" /></GeometryDrawing.Geometry></GeometryDrawing>
         </DrawingGroup>
       </DrawingImage.Drawing>
     </DrawingImage>
