@@ -80,47 +80,92 @@ internal sealed class ErrorInspectionService
     public RuleEvaluationOutcome EvaluateRules(AttributeRuleType ruleType,
         EvaluationExtent extentScope, bool changesInVersion, bool runAsynchronously)
     {
-        var mapView = ResolveMapView();
-        var map = mapView.Map ?? throw new InvalidOperationException(
-            "The active map is still loading. Wait for it to finish loading and run validation again.");
-        if (!HasErrorLayers(map))
-            throw new InvalidOperationException("No Error Layers are available in the active map.");
-
-        // Use a real utility-network source for evaluation so Pro keeps the active
-        // feature-service and version connection.
-        using var geodatabase = OpenUtilityNetworkGeodatabase(map);
-
-        using var manager = geodatabase.GetAttributeRuleManager();
-        if (!manager.IsEvaluationSupported())
-            throw new InvalidOperationException(
-                "This geodatabase does not support SDK evaluation of batch calculation or validation rules.");
-
-        // Only use ChangesInVersion for a named service version. It is not valid
-        // for file geodatabases or the default version.
-        var canEvaluateVersionChanges = CanEvaluateChangesInVersion(geodatabase);
-        var useVersionChanges = changesInVersion && canEvaluateVersionChanges;
-        var versionScope = useVersionChanges
-            ? VersionEvaluationScope.ChangesInVersion
-            : VersionEvaluationScope.EntireVersion;
-        var description = extentScope == EvaluationExtent.Visible
-            ? new AttributeRuleEvaluationDescription(ruleType, versionScope, mapView.Extent)
-            : new AttributeRuleEvaluationDescription(ruleType, versionScope);
-        if (geodatabase.GetGeodatabaseType() == GeodatabaseType.Service)
+        var stage = "finding the active map";
+        try
         {
-            description.ServiceSynchronizationType = runAsynchronously
-                ? ServiceSynchronizationType.Asynchronous
-                : ServiceSynchronizationType.Synchronous;
-        }
+            var mapView = ResolveMapView();
+            var map = mapView.Map ?? throw new InvalidOperationException(
+                "The active map is still loading. Wait for it to finish loading and run validation again.");
+            // The evaluation edit operation needs a layer in the active map connected
+            // to this geodatabase. Use the Error Layer's actual map connection.
+            stage = "opening the Error Layer connection";
+            using var geodatabase = OpenErrorLayerGeodatabase(map);
 
-        // This also creates an undoable edit operation and refreshes affected layers.
-        var result = manager.EvaluateInEditOperation(description) ?? throw new InvalidOperationException(
-            "The validation service completed without returning an evaluation result. " +
-            "Check the service logs for the corresponding validation request.");
-        var scopeNotice = changesInVersion && !useVersionChanges
-            ? "This local or nonversioned workspace has no version delta; pending rows were evaluated using EntireVersion scope and the selected extent."
-            : string.Empty;
-        return new RuleEvaluationOutcome(result.NumberOfErrors, scopeNotice,
-            geodatabase.GetGeodatabaseType() == GeodatabaseType.Service && runAsynchronously);
+            stage = "checking evaluation support";
+            using var manager = geodatabase.GetAttributeRuleManager();
+            if (!manager.IsEvaluationSupported())
+                throw new InvalidOperationException(
+                    "This geodatabase does not support SDK evaluation of batch calculation or validation rules.");
+
+            // Only use ChangesInVersion for a named service version. It is not valid
+            // for file geodatabases or the default version.
+            stage = "checking the current version";
+            var canEvaluateVersionChanges = CanEvaluateChangesInVersion(geodatabase);
+            var useVersionChanges = changesInVersion && canEvaluateVersionChanges;
+            var versionScope = useVersionChanges
+                ? VersionEvaluationScope.ChangesInVersion
+                : VersionEvaluationScope.EntireVersion;
+            stage = "preparing evaluation options";
+            var description = extentScope == EvaluationExtent.Visible
+                ? new AttributeRuleEvaluationDescription(ruleType, versionScope, mapView.Extent)
+                : new AttributeRuleEvaluationDescription(ruleType, versionScope);
+            if (geodatabase.GetGeodatabaseType() == GeodatabaseType.Service)
+            {
+                description.ServiceSynchronizationType = runAsynchronously
+                    ? ServiceSynchronizationType.Asynchronous
+                    : ServiceSynchronizationType.Synchronous;
+            }
+
+            // This also creates an undoable edit operation and refreshes affected layers.
+            stage = $"evaluating rules ({extentScope} extent, {versionScope}, {description.ServiceSynchronizationType})";
+            var result = manager.EvaluateInEditOperation(description) ?? throw new InvalidOperationException(
+                "The validation service completed without returning an evaluation result. " +
+                "Check the service logs for the corresponding validation request.");
+            var scopeNotice = changesInVersion && !useVersionChanges
+                ? "This local or nonversioned workspace has no version delta; pending rows were evaluated using EntireVersion scope and the selected extent."
+                : string.Empty;
+            return new RuleEvaluationOutcome(result.NumberOfErrors, scopeNotice,
+                geodatabase.GetGeodatabaseType() == GeodatabaseType.Service && runAsynchronously);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed while {stage}.", ex);
+        }
+    }
+
+    private static Geodatabase OpenErrorLayerGeodatabase(Map map)
+    {
+        foreach (var layer in map.GetLayersAsFlattenedList().OfType<FeatureLayer>())
+        {
+            try
+            {
+                if (!IsErrorLayer(layer)) continue;
+                using var table = layer.GetTable();
+                var datastore = table.GetDatastore();
+                if (datastore is Geodatabase geodatabase) return geodatabase;
+                datastore?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Evaluation Error Layer skipped {layer.Name}: {ex}");
+            }
+        }
+        foreach (var tableMember in map.GetStandaloneTablesAsFlattenedList())
+        {
+            try
+            {
+                if (!IsErrorTable(tableMember)) continue;
+                using var table = tableMember.GetTable();
+                var datastore = table.GetDatastore();
+                if (datastore is Geodatabase geodatabase) return geodatabase;
+                datastore?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Evaluation Error Table skipped {tableMember.Name}: {ex}");
+            }
+        }
+        throw new InvalidOperationException("The Error Layers do not have a geodatabase connection.");
     }
 
     public void SetException(ValidationErrorType errorType, long errorObjectId, bool isException)
@@ -177,10 +222,6 @@ internal sealed class ErrorInspectionService
             .Select(pane => pane.MapView)
             .FirstOrDefault(mapView => mapView != null)
         ?? throw new InvalidOperationException("Open a map before inspecting errors.");
-
-    private static bool HasErrorLayers(Map map) =>
-        map.GetLayersAsFlattenedList().OfType<FeatureLayer>().Any(IsErrorLayer) ||
-        map.GetStandaloneTablesAsFlattenedList().Any(IsErrorTable);
 
     private static Geodatabase OpenUtilityNetworkGeodatabase(Map map)
     {
